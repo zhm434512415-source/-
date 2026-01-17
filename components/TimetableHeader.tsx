@@ -14,7 +14,8 @@ import {
   FileUp,
   Undo2,
   Redo2,
-  Type
+  Type,
+  Share2
 } from 'lucide-react';
 
 interface TimetableHeaderProps {
@@ -23,6 +24,7 @@ interface TimetableHeaderProps {
   onExport: () => void;
   onSaveProject: () => void;
   onLoadProject: () => void;
+  onShare: () => void;
   onCreateClass: () => void;
   theme: 'light' | 'dark';
   onThemeToggle: () => void;
@@ -37,7 +39,7 @@ interface TimetableHeaderProps {
 }
 
 const TimetableHeader: React.FC<TimetableHeaderProps> = ({ 
-  currentDate, onDateChange, onExport, onSaveProject, onLoadProject, onCreateClass, theme, onThemeToggle, onToggleFullscreen,
+  currentDate, onDateChange, onExport, onSaveProject, onLoadProject, onShare, onCreateClass, theme, onThemeToggle, onToggleFullscreen,
   onUndo, onRedo, canUndo, canRedo, onIncreaseScale, onDecreaseScale, scale
 }) => {
   const monthStr = format(currentDate, 'yyyy年 MMMM');
@@ -76,7 +78,6 @@ const TimetableHeader: React.FC<TimetableHeaderProps> = ({
           </button>
         </div>
 
-        {/* 字体缩放组 */}
         <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
           <button onClick={onDecreaseScale} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md transition-all text-gray-600 dark:text-gray-400 flex items-center gap-0.5" title="减小字体 (A-)">
             <Type size={14} className="opacity-70" />
@@ -106,6 +107,9 @@ const TimetableHeader: React.FC<TimetableHeaderProps> = ({
           </button>
           <button onClick={onLoadProject} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md transition-all text-gray-600 dark:text-gray-400" title="读取存档">
             <FileUp size={18} />
+          </button>
+          <button onClick={onShare} className="p-1.5 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 rounded-md transition-all text-blue-600 dark:text-blue-400" title="生成分享链接">
+            <Share2 size={18} />
           </button>
         </div>
 

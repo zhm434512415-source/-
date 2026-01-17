@@ -49,6 +49,28 @@ const App: React.FC = () => {
   const timetableRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
 
+  // 检测 URL 分享数据
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedData = params.get('data');
+    if (sharedData) {
+      try {
+        const decodedData = JSON.parse(decodeURIComponent(atob(sharedData)));
+        if (decodedData.classes && decodedData.schedule) {
+          const confirmLoad = window.confirm("检测到他人分享的课表数据，是否覆盖当前本地数据进行查看？");
+          if (confirmLoad) {
+            setClasses(decodedData.classes);
+            setSchedule(decodedData.schedule);
+            // 清除 URL 参数
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+      } catch (e) {
+        console.error("解析分享链接失败", e);
+      }
+    }
+  }, []);
+
   const updateScheduleWithHistory = useCallback((newSchedule: ScheduledClass[]) => {
     setPast(prev => [...prev.slice(-49), schedule]);
     setFuture([]);
@@ -194,6 +216,21 @@ const App: React.FC = () => {
     link.click();
   };
 
+  const handleShare = () => {
+    const data = { classes, schedule };
+    const encoded = btoa(encodeURIComponent(JSON.stringify(data)));
+    const shareUrl = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
+    
+    // 复制到剪贴板
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      alert("分享链接已复制到剪贴板！发送给他人打开网址即可同步你的课表。");
+    }).catch(err => {
+      console.error('复制失败', err);
+      // 后备方案
+      window.prompt("分享网址已生成，请手动复制：", shareUrl);
+    });
+  };
+
   const loadProject = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -241,7 +278,6 @@ const App: React.FC = () => {
     }
   };
 
-  // 修改：步进为 0.5 (50%)，范围 1.0 - 3.0
   const handleIncreaseScale = () => setTimetableScale(prev => Math.min(prev + 0.5, 3.0));
   const handleDecreaseScale = () => setTimetableScale(prev => Math.max(prev - 0.5, 1.0));
 
@@ -253,6 +289,7 @@ const App: React.FC = () => {
         onExport={handleExport} 
         onSaveProject={saveProject}
         onLoadProject={loadProject}
+        onShare={handleShare}
         onCreateClass={() => setIsModalOpen(true)}
         theme={theme}
         onThemeToggle={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
@@ -331,7 +368,6 @@ const App: React.FC = () => {
                       scale={timetableScale}
                     />
                   ))}
-                  {/* Income 标签：大小不变 */}
                   <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center font-bold text-gray-400 py-1.5" style={{ fontSize: '10px' }}>
                     Income
                   </div>
