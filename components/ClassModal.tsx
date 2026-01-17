@@ -1,17 +1,29 @@
+
 import React, { useState, useEffect } from 'react';
 import { ClassDefinition, RecurringConfig, ClassType, ClassMode } from '../types';
 import { COLORS } from '../constants';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 
 interface ClassModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (classDef: ClassDefinition, recurring?: RecurringConfig & { startDate: Date; endDate: Date; updateMode: 'future' | 'range' }) => void;
+  onClearRange?: (classId: string, startDate: string, endDate: string) => void;
   initialData?: ClassDefinition;
 }
 
-const ClassModal: React.FC<ClassModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+const WEEK_DAYS = [
+  { label: '一', value: 1 },
+  { label: '二', value: 2 },
+  { label: '三', value: 3 },
+  { label: '四', value: 4 },
+  { label: '五', value: 5 },
+  { label: '六', value: 6 },
+  { label: '日', value: 0 },
+];
+
+const ClassModal: React.FC<ClassModalProps> = ({ isOpen, onClose, onSave, onClearRange, initialData }) => {
   const [name, setName] = useState('');
   const [fee, setFee] = useState<number | string>('');
   const [mode, setMode] = useState<ClassMode>('offline');
@@ -36,6 +48,16 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, onClose, onSave, initia
       setType(initialData.type);
       setCapacity(initialData.capacity ?? '');
       setColor(initialData.color);
+
+      // 如果有记忆的配置，自动填充
+      if (initialData.batchConfig) {
+        setStartTime(initialData.batchConfig.startTime);
+        setEndTime(initialData.batchConfig.endTime);
+        setFreq(initialData.batchConfig.frequency);
+        setSelectedDays(initialData.batchConfig.daysOfWeek || [1]);
+        if (initialData.batchConfig.startDate) setRecurStartDate(initialData.batchConfig.startDate);
+        if (initialData.batchConfig.endDate) setRecurEndDate(initialData.batchConfig.endDate);
+      }
     } else {
       setName('');
       setFee('');
@@ -43,10 +65,22 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, onClose, onSave, initia
       setType('Group');
       setCapacity(''); 
       setColor(COLORS[0].value);
+      setStartTime('09:00');
+      setEndTime('10:30');
+      setFreq('weekly');
+      setSelectedDays([1]);
+      setRecurStartDate(format(new Date(), 'yyyy-MM-dd'));
+      setRecurEndDate(format(addMonths(new Date(), 1), 'yyyy-MM-dd'));
     }
   }, [initialData, isOpen]);
 
   if (!isOpen) return null;
+
+  const toggleDay = (day: number) => {
+    setSelectedDays(prev => 
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,7 +199,7 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, onClose, onSave, initia
                   onClick={() => setColor(c.value)}
                   className={`w-8 h-8 rounded-full border-2 transition-transform ${
                     color === c.value ? 'scale-110 border-gray-800 dark:border-white' : 'border-transparent'
-                  } ${c.value.split(' ')[0]}`}
+                  } ${c.value}`}
                 />
               ))}
             </div>
@@ -216,6 +250,28 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, onClose, onSave, initia
                   </select>
                 </div>
 
+                {freq === 'weekly' && (
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-2">选择周几</label>
+                    <div className="flex justify-between gap-1">
+                      {WEEK_DAYS.map(day => (
+                        <button
+                          key={day.value}
+                          type="button"
+                          onClick={() => toggleDay(day.value)}
+                          className={`flex-1 h-8 text-[10px] font-bold rounded transition-all border ${
+                            selectedDays.includes(day.value) 
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                              : 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-2 border-t border-gray-200 dark:border-slate-700">
                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-2">更新策略</label>
                    <div className="space-y-2">
@@ -229,6 +285,19 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, onClose, onSave, initia
                       </label>
                    </div>
                 </div>
+
+                {initialData && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => onClearRange?.(initialData.id, recurStartDate, recurEndDate)}
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg border border-red-100 dark:border-red-900/30 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                      清除选定起止日期内的已排课程
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

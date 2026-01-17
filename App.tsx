@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ClassDefinition, ScheduledClass } from './types';
 import TimetableHeader from './components/TimetableHeader';
@@ -6,7 +7,7 @@ import ClassCard from './components/ClassCard';
 import ClassModal from './components/ClassModal';
 import InstanceTimeModal from './components/InstanceTimeModal';
 import { generateMonthDays, applyRecurrence, getTimelineRange } from './utils';
-import { format, startOfDay, isBefore, isAfter, isSameMonth } from 'date-fns';
+import { format, startOfDay, isBefore, isAfter, isSameMonth, parseISO } from 'date-fns';
 import { Search, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
@@ -72,9 +73,22 @@ const App: React.FC = () => {
   }, [timelineRange]);
 
   const handleSaveClass = (classDef: ClassDefinition, recurring?: any) => {
+    // 如果有批量配置，将其保存到班级定义中，实现“记忆”
+    const updatedClassDef = {
+      ...classDef,
+      batchConfig: recurring ? {
+        startTime: recurring.startTime,
+        endTime: recurring.endTime,
+        frequency: recurring.frequency,
+        daysOfWeek: recurring.daysOfWeek,
+        startDate: format(recurring.startDate, 'yyyy-MM-dd'),
+        endDate: format(recurring.endDate, 'yyyy-MM-dd')
+      } : classDef.batchConfig
+    };
+
     const isNew = !classes.find(c => c.id === classDef.id);
-    if (isNew) setClasses(prev => [...prev, classDef]);
-    else setClasses(prev => prev.map(c => c.id === classDef.id ? classDef : c));
+    if (isNew) setClasses(prev => [...prev, updatedClassDef]);
+    else setClasses(prev => prev.map(c => c.id === classDef.id ? updatedClassDef : c));
 
     if (recurring) {
       const { startDate, endDate, updateMode } = recurring;
@@ -89,13 +103,28 @@ const App: React.FC = () => {
           );
         }
         const effectiveStart = isBefore(startDate, today) ? today : startDate;
-        const newInstances = applyRecurrence(classDef, { ...recurring, startDate: effectiveStart }, today);
+        const newInstances = applyRecurrence(updatedClassDef, { ...recurring, startDate: effectiveStart }, today);
         return [...otherClasses, ...pastInstances, ...futureInstancesToKeep, ...newInstances];
       });
     } else if (!isNew) {
-      setSchedule(prev => prev.map(s => (s.id === classDef.id && !isBefore(new Date(s.date), today)) ? { ...s, ...classDef } : s));
+      setSchedule(prev => prev.map(s => (s.id === classDef.id && !isBefore(new Date(s.date), today)) ? { ...s, ...updatedClassDef } : s));
     }
     setEditingClass(undefined);
+  };
+
+  const handleClearRange = (classId: string, startDateStr: string, endDateStr: string) => {
+    const start = startOfDay(parseISO(startDateStr));
+    const end = startOfDay(parseISO(endDateStr));
+    
+    setSchedule(prev => prev.filter(s => {
+      if (s.id !== classId) return true;
+      const classDate = startOfDay(parseISO(s.date));
+      // 如果课程在这个范围内，则删除
+      const isInRange = (isAfter(classDate, start) || classDate.getTime() === start.getTime()) && 
+                        (isBefore(classDate, end) || classDate.getTime() === end.getTime());
+      return !isInRange;
+    }));
+    alert('已清除选定日期范围内的班级课程。');
   };
 
   const handleUpdateInstanceTime = (instanceId: string, startTime: string, endTime: string) => {
@@ -105,12 +134,17 @@ const App: React.FC = () => {
   const performDrop = (date: string, classId: string) => {
     const classDef = classes.find(c => c.id === classId);
     if (!classDef) return;
+    
+    // 如果班级有记忆配置，则使用记忆的时间
+    const startTime = classDef.batchConfig?.startTime || "09:00";
+    const endTime = classDef.batchConfig?.endTime || "10:30";
+
     const newInstance: ScheduledClass = {
       ...classDef,
       instanceId: crypto.randomUUID(),
       date,
-      startTime: "09:00",
-      endTime: "10:30"
+      startTime,
+      endTime
     };
     setSchedule(prev => [...prev, newInstance]);
     setDraggedClassId(null);
@@ -292,7 +326,6 @@ const App: React.FC = () => {
                     );
                   })}
 
-                  {/* Income Row at the bottom of each week */}
                   <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-gray-400 py-1.5">
                     Income
                   </div>
@@ -318,6 +351,7 @@ const App: React.FC = () => {
         isOpen={isModalOpen} 
         onClose={() => { setIsModalOpen(false); setEditingClass(undefined); }} 
         onSave={handleSaveClass} 
+        onClearRange={handleClearRange}
         initialData={editingClass} 
       />
       

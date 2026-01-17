@@ -10,6 +10,15 @@ export interface ClassDefinition {
   type: ClassType;
   capacity?: number;
   color: string;
+  // 增加班级专属的排课记忆配置
+  batchConfig?: {
+    startTime: string;
+    endTime: string;
+    frequency: 'weekly' | 'daily' | 'every_other';
+    daysOfWeek?: number[];
+    startDate?: string;
+    endDate?: string;
+  };
 }
 
 export interface ScheduledClass extends ClassDefinition {
@@ -23,7 +32,6 @@ export interface RecurringConfig {
   classId: string;
   startTime: string;
   endTime: string;
-  // Added 'every_other' to the frequency union to resolve type errors in utils.ts
   frequency: 'weekly' | 'odd' | 'even' | 'daily' | 'every_other';
   daysOfWeek?: number[]; // 0-6
   month?: number; // 0-11

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ClassDefinition } from '../types';
 import { ModeIcon, getClassTypeIcon } from '../constants';
@@ -15,7 +16,7 @@ const ClassCard: React.FC<ClassCardProps> = ({ classDef, onDragStart, onEdit, on
     <div
       draggable
       onDragStart={(e) => onDragStart(e, classDef.id)}
-      className={`p-3 mb-2 rounded-lg border-l-4 shadow-sm cursor-grab active:cursor-grabbing transition-all hover:shadow-md bg-white dark:bg-slate-800 dark:border-slate-700 ${classDef.color.split(' ')[1]}`}
+      className={`p-3 mb-2 rounded-lg border-l-4 shadow-sm cursor-grab active:cursor-grabbing transition-all hover:shadow-md ${classDef.color}`}
     >
       <div className="flex justify-between items-start">
         <div className="flex-1">
@@ -35,13 +36,13 @@ const ClassCard: React.FC<ClassCardProps> = ({ classDef, onDragStart, onEdit, on
         <div className="flex gap-1">
           <button 
             onClick={(e) => { e.stopPropagation(); onEdit(classDef); }}
-            className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded text-gray-500 dark:text-gray-400"
+            className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-gray-500 dark:text-gray-300 transition-colors"
           >
             <Edit2 size={12} />
           </button>
           <button 
             onClick={(e) => { e.stopPropagation(); onDelete(classDef.id); }}
-            className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-red-500 dark:text-red-400"
+            className="p-1 hover:bg-red-500/20 rounded text-red-500 dark:text-red-400 transition-colors"
           >
             <Trash2 size={12} />
           </button>
