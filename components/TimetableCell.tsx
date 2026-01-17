@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ScheduledClass } from '../types';
 import { format, isSameDay } from 'date-fns';
@@ -15,6 +16,7 @@ interface TimetableCellProps {
   onDrop: () => void;
   onRemoveInstance: (instanceId: string) => void;
   onEditInstance: (instance: ScheduledClass) => void;
+  scale: number;
 }
 
 const TimetableCell: React.FC<TimetableCellProps> = ({ 
@@ -26,7 +28,8 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
   onInstanceClick,
   onDrop, 
   onRemoveInstance,
-  onEditInstance 
+  onEditInstance,
+  scale
 }) => {
   const isToday = isSameDay(new Date(), date);
   const totalMinutes = timelineRange.max - timelineRange.min;
@@ -43,7 +46,6 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onClick={(e) => {
-        // Only trigger drop if not clicking an instance
         onDrop();
       }}
       className={`relative border-r dark:border-slate-700 last:border-r-0 transition-colors group ${
@@ -54,10 +56,13 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
       <div className={`p-1 flex items-center justify-between sticky top-0 z-20 ${
         isToday ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-50/80 dark:bg-slate-800/80 group-hover:bg-gray-100 dark:group-hover:bg-slate-700'
       }`}>
-        <span className={`text-[10px] font-bold ${!isMainMonth && !isToday ? 'opacity-30' : 'dark:text-white'}`}>
+        <span 
+          className={`font-bold ${!isMainMonth && !isToday ? 'opacity-30' : 'dark:text-white'}`}
+          style={{ fontSize: `${10 * scale}px` }}
+        >
           {format(date, 'd')}
         </span>
-        {isToday && <span className="text-[8px] font-black uppercase tracking-wider">今日</span>}
+        {isToday && <span style={{ fontSize: `${8 * scale}px` }} className="font-black uppercase tracking-wider">今日</span>}
       </div>
 
       <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.1]">
@@ -92,39 +97,49 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
                     e.stopPropagation(); 
                     onEditInstance(item); 
                   }}
-                  className="text-[8px] font-bold leading-none bg-white/60 dark:bg-black/30 px-1 py-0.5 rounded text-gray-800 dark:text-gray-100 border border-black/5 dark:border-white/5 cursor-pointer hover:bg-white/90 dark:hover:bg-black/50 transition-colors"
-                  title="点击修改课程时间"
+                  className="font-bold leading-none bg-white/60 dark:bg-black/30 px-1 py-0.5 rounded text-gray-800 dark:text-gray-100 border border-black/5 dark:border-white/5 cursor-pointer hover:bg-white/90 dark:hover:bg-black/50 transition-colors"
+                  style={{ fontSize: `${8 * scale}px` }}
+                  title="修改课程时间"
                 >
                   {item.startTime}
                 </span>
 
                 <div className="flex gap-1 items-center">
-                   {item.mode === 'online' && <Wifi size={10} className="text-blue-600 dark:text-blue-300 drop-shadow-sm" />}
-                   
+                   {item.mode === 'online' && (
+                     <Wifi 
+                        size={10} 
+                        style={{ transform: `scale(${scale})`, transformOrigin: 'right top' }} 
+                        className="text-blue-600 dark:text-blue-300 drop-shadow-sm" 
+                     />
+                   )}
                    <button
                     onClick={(e) => { 
                       e.stopPropagation(); 
                       onRemoveInstance(item.instanceId); 
                     }}
                     className="opacity-40 lg:opacity-0 group-hover/item:opacity-100 p-1 hover:bg-black/10 rounded transition-all active:scale-90"
-                    title="删除排课"
                   >
-                    <Trash2 size={12} className="text-gray-900 dark:text-white" />
+                    <Trash2 size={12} style={{ transform: `scale(${scale})`, transformOrigin: 'center' }} className="text-gray-900 dark:text-white" />
                   </button>
                 </div>
               </div>
               
-              <div className="font-bold text-[10px] truncate leading-tight mt-1 text-gray-900 dark:text-white drop-shadow-sm">
+              <div 
+                className="font-bold truncate leading-tight mt-1 text-gray-900 dark:text-white drop-shadow-sm"
+                style={{ fontSize: `${10 * scale}px` }}
+              >
                 {item.name}
               </div>
 
-              {height > 50 && (
-                <div className="flex items-center justify-between text-[7px] font-bold opacity-90 mt-auto text-gray-800 dark:text-white/90">
+              {height > 35 * scale && (
+                <div className="flex items-center justify-between font-bold opacity-90 mt-auto text-gray-800 dark:text-white/90" style={{ fontSize: `${7 * scale}px` }}>
                   <span className="flex items-center gap-0.5">
-                    {getClassTypeIcon(item.type)}
+                    {getClassTypeIcon(item.type, 10 * scale)}
                     {item.type === 'Group' ? item.capacity : ''}
                   </span>
-                  <span className="bg-white/40 dark:bg-black/20 px-1 rounded border border-black/5 dark:border-white/5">¥{item.fee}</span>
+                  <span className="bg-white/40 dark:bg-black/20 px-1 rounded border border-black/5 dark:border-white/5">
+                    ¥{item.fee}
+                  </span>
                 </div>
               )}
             </div>

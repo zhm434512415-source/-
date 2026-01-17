@@ -20,8 +20,11 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('schedule');
     return saved ? JSON.parse(saved) : [];
   });
+  const [timetableScale, setTimetableScale] = useState(() => {
+    const saved = localStorage.getItem('timetableScale');
+    return saved ? parseFloat(saved) : 1.0;
+  });
 
-  // 撤销/重做历史栈
   const [past, setPast] = useState<ScheduledClass[][]>([]);
   const [future, setFuture] = useState<ScheduledClass[][]>([]);
   
@@ -46,9 +49,8 @@ const App: React.FC = () => {
   const timetableRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
 
-  // 统一更新 Schedule 且记录历史
   const updateScheduleWithHistory = useCallback((newSchedule: ScheduledClass[]) => {
-    setPast(prev => [...prev.slice(-49), schedule]); // 最多保留50步
+    setPast(prev => [...prev.slice(-49), schedule]);
     setFuture([]);
     setSchedule(newSchedule);
   }, [schedule]);
@@ -57,7 +59,6 @@ const App: React.FC = () => {
     if (past.length === 0) return;
     const previous = past[past.length - 1];
     const newPast = past.slice(0, past.length - 1);
-    
     setFuture(prev => [schedule, ...prev]);
     setPast(newPast);
     setSchedule(previous);
@@ -67,7 +68,6 @@ const App: React.FC = () => {
     if (future.length === 0) return;
     const next = future[0];
     const newFuture = future.slice(1);
-    
     setPast(prev => [...prev, schedule]);
     setFuture(newFuture);
     setSchedule(next);
@@ -76,7 +76,8 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('classes', JSON.stringify(classes));
     localStorage.setItem('schedule', JSON.stringify(schedule));
-  }, [classes, schedule]);
+    localStorage.setItem('timetableScale', timetableScale.toString());
+  }, [classes, schedule, timetableScale]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -85,7 +86,6 @@ const App: React.FC = () => {
   }, [theme]);
 
   const monthDays = useMemo(() => generateMonthDays(currentDate), [currentDate]);
-  
   const weeks = useMemo(() => {
     const res = [];
     for (let i = 0; i < monthDays.length; i += 7) {
@@ -115,11 +115,9 @@ const App: React.FC = () => {
         endDate: format(recurring.endDate, 'yyyy-MM-dd')
       } : classDef.batchConfig
     };
-
     const isNew = !classes.find(c => c.id === classDef.id);
     if (isNew) setClasses(prev => [...prev, updatedClassDef]);
     else setClasses(prev => prev.map(c => c.id === classDef.id ? updatedClassDef : c));
-
     if (recurring) {
       const { startDate, endDate, updateMode } = recurring;
       const otherClasses = schedule.filter(s => s.id !== classDef.id);
@@ -133,7 +131,6 @@ const App: React.FC = () => {
       }
       const effectiveStart = isBefore(startDate, today) ? today : startDate;
       const newInstances = applyRecurrence(updatedClassDef, { ...recurring, startDate: effectiveStart }, today);
-      
       updateScheduleWithHistory([...otherClasses, ...pastInstances, ...futureInstancesToKeep, ...newInstances]);
     } else if (!isNew) {
       updateScheduleWithHistory(schedule.map(s => (s.id === classDef.id && !isBefore(new Date(s.date), today)) ? { ...s, ...updatedClassDef } : s));
@@ -144,7 +141,6 @@ const App: React.FC = () => {
   const handleClearRange = (classId: string, startDateStr: string, endDateStr: string) => {
     const start = startOfDay(parseISO(startDateStr));
     const end = startOfDay(parseISO(endDateStr));
-    
     updateScheduleWithHistory(schedule.filter(s => {
       if (s.id !== classId) return true;
       const classDate = startOfDay(parseISO(s.date));
@@ -162,10 +158,8 @@ const App: React.FC = () => {
   const performDrop = (date: string, classId: string) => {
     const classDef = classes.find(c => c.id === classId);
     if (!classDef) return;
-    
     const startTime = classDef.batchConfig?.startTime || "09:00";
     const endTime = classDef.batchConfig?.endTime || "10:30";
-
     const newInstance: ScheduledClass = {
       ...classDef,
       instanceId: crypto.randomUUID(),
@@ -247,6 +241,10 @@ const App: React.FC = () => {
     }
   };
 
+  // 修改：步进为 0.5 (50%)，范围 1.0 - 3.0
+  const handleIncreaseScale = () => setTimetableScale(prev => Math.min(prev + 0.5, 3.0));
+  const handleDecreaseScale = () => setTimetableScale(prev => Math.max(prev - 0.5, 1.0));
+
   return (
     <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden select-none transition-all duration-500 ${isRotated ? 'force-landscape' : ''}`}>
       <TimetableHeader 
@@ -263,6 +261,9 @@ const App: React.FC = () => {
         onRedo={handleRedo}
         canUndo={past.length > 0}
         canRedo={future.length > 0}
+        onIncreaseScale={handleIncreaseScale}
+        onDecreaseScale={handleDecreaseScale}
+        scale={timetableScale}
       />
 
       <div className="flex-1 flex overflow-hidden relative" onClick={() => setSelectedInstanceId(null)}>
@@ -282,36 +283,14 @@ const App: React.FC = () => {
             
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
               {classes.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
-                <div key={c.id} 
-                  className={`relative transition-all ${selectedClassId === c.id ? 'ring-2 ring-blue-500 ring-offset-2 rounded-lg' : ''}`}
-                  onClick={() => setSelectedClassId(c.id === selectedClassId ? null : c.id)}
-                >
-                  <ClassCard 
-                    classDef={c} 
-                    onDragStart={(_, id) => setDraggedClassId(id)}
-                    onEdit={(def) => { setEditingClass(def); setIsModalOpen(true); }}
-                    onDelete={(id) => setClasses(prev => prev.filter(x => x.id !== id))}
-                  />
+                <div key={c.id} className={`relative transition-all ${selectedClassId === c.id ? 'ring-2 ring-blue-500 ring-offset-2 rounded-lg' : ''}`} onClick={() => setSelectedClassId(c.id === selectedClassId ? null : c.id)}>
+                  <ClassCard classDef={c} onDragStart={(_, id) => setDraggedClassId(id)} onEdit={(def) => { setEditingClass(def); setIsModalOpen(true); }} onDelete={(id) => setClasses(prev => prev.filter(x => x.id !== id))} />
                 </div>
               ))}
             </div>
-            <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border-t dark:border-slate-800">
-              <div className="flex items-start gap-2 text-[10px] text-blue-700 dark:text-blue-400">
-                <Info size={12} className="mt-0.5 shrink-0" />
-                <p>点击选择班级库，再点击课表即可快速排课。</p>
-              </div>
-            </div>
           </div>
-
-          <button 
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="absolute -right-2 top-1/2 -translate-y-1/2 z-50 bg-white dark:bg-slate-800 border dark:border-slate-700 w-5 h-16 flex items-center justify-center rounded-full shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-all group"
-            title={isSidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
-          >
-            {isSidebarCollapsed ? 
-              <ChevronRight size={12} className="text-blue-600 dark:text-blue-400 group-hover:scale-125 transition-transform" /> : 
-              <ChevronLeft size={12} className="text-gray-400 dark:text-gray-500 group-hover:scale-125 transition-transform" />
-            }
+          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute -right-2 top-1/2 -translate-y-1/2 z-50 bg-white dark:bg-slate-800 border dark:border-slate-700 w-5 h-16 flex items-center justify-center rounded-full shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-all group">
+            {isSidebarCollapsed ? <ChevronRight size={12} className="text-blue-600 dark:text-blue-400" /> : <ChevronLeft size={12} className="text-gray-400 dark:text-gray-500" />}
           </button>
         </div>
 
@@ -320,7 +299,7 @@ const App: React.FC = () => {
             <div className="grid grid-cols-[60px_repeat(7,1fr)] bg-gray-50 dark:bg-slate-800 border-b dark:border-slate-700">
               <div className="border-r dark:border-slate-700"></div>
               {['一', '二', '三', '四', '五', '六', '日'].map(d => (
-                <div key={d} className="py-2 text-center text-xs font-bold text-gray-500 dark:text-gray-400 border-r dark:border-slate-700 last:border-r-0">周{d}</div>
+                <div key={d} style={{ fontSize: `${12 * timetableScale}px` }} className="py-2 text-center font-bold text-gray-500 dark:text-gray-400 border-r dark:border-slate-700 last:border-r-0">周{d}</div>
               ))}
             </div>
 
@@ -334,41 +313,33 @@ const App: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  
-                  {week.map(day => {
-                    const dateKey = format(day, 'yyyy-MM-dd');
-                    return (
-                      <TimetableCell
-                        key={dateKey}
-                        date={day}
-                        isMainMonth={isSameMonth(day, currentDate)}
-                        scheduledClasses={schedule.filter(s => s.date === dateKey)}
-                        timelineRange={timelineRange}
-                        selectedInstanceId={selectedInstanceId}
-                        onInstanceClick={handleInstanceClick}
-                        onDrop={() => {
-                          if (draggedClassId) performDrop(dateKey, draggedClassId);
-                          else if (selectedClassId) performDrop(dateKey, selectedClassId);
-                        }}
-                        onRemoveInstance={(id) => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))}
-                        onEditInstance={(instance) => {
-                          setEditingInstance(instance);
-                          setIsInstanceModalOpen(true);
-                        }}
-                      />
-                    );
-                  })}
-
-                  <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-gray-400 py-1.5">
+                  {week.map(day => (
+                    <TimetableCell
+                      key={format(day, 'yyyy-MM-dd')}
+                      date={day}
+                      isMainMonth={isSameMonth(day, currentDate)}
+                      scheduledClasses={schedule.filter(s => s.date === format(day, 'yyyy-MM-dd'))}
+                      timelineRange={timelineRange}
+                      selectedInstanceId={selectedInstanceId}
+                      onInstanceClick={handleInstanceClick}
+                      onDrop={() => {
+                        if (draggedClassId) performDrop(format(day, 'yyyy-MM-dd'), draggedClassId);
+                        else if (selectedClassId) performDrop(format(day, 'yyyy-MM-dd'), selectedClassId);
+                      }}
+                      onRemoveInstance={(id) => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))}
+                      onEditInstance={(instance) => { setEditingInstance(instance); setIsInstanceModalOpen(true); }}
+                      scale={timetableScale}
+                    />
+                  ))}
+                  {/* Income 标签：大小不变 */}
+                  <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center font-bold text-gray-400 py-1.5" style={{ fontSize: '10px' }}>
                     Income
                   </div>
                   {week.map(day => {
                     const dateKey = format(day, 'yyyy-MM-dd');
-                    const dailyIncome = schedule
-                      .filter(s => s.date === dateKey)
-                      .reduce((sum, s) => sum + s.fee, 0);
+                    const dailyIncome = schedule.filter(s => s.date === dateKey).reduce((sum, s) => sum + s.fee, 0);
                     return (
-                      <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1.5">
+                      <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1.5" style={{ fontSize: `${12 * timetableScale}px` }}>
                         {dailyIncome > 0 ? dailyIncome : ''}
                       </div>
                     );
@@ -379,21 +350,8 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-
-      <ClassModal 
-        isOpen={isModalOpen} 
-        onClose={() => { setIsModalOpen(false); setEditingClass(undefined); }} 
-        onSave={handleSaveClass} 
-        onClearRange={handleClearRange}
-        initialData={editingClass} 
-      />
-      
-      <InstanceTimeModal
-        isOpen={isInstanceModalOpen}
-        onClose={() => { setIsInstanceModalOpen(false); setEditingInstance(null); }}
-        instance={editingInstance}
-        onSave={handleUpdateInstanceTime}
-      />
+      <ClassModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingClass(undefined); }} onSave={handleSaveClass} onClearRange={handleClearRange} initialData={editingClass} />
+      <InstanceTimeModal isOpen={isInstanceModalOpen} onClose={() => { setIsInstanceModalOpen(false); setEditingInstance(null); }} instance={editingInstance} onSave={handleUpdateInstanceTime} />
     </div>
   );
 };

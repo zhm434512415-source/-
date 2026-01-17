@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Wifi, Users, User, UserPlus } from 'lucide-react';
 import { ClassMode, ClassType } from './types';
@@ -13,17 +14,17 @@ export const COLORS = [
   { name: 'Orange', value: 'bg-orange-100 dark:bg-orange-800 border-orange-400 dark:border-orange-600 text-orange-900 dark:text-orange-50' },
 ];
 
-export const getClassTypeIcon = (type: ClassType) => {
+export const getClassTypeIcon = (type: ClassType, size: number = 14) => {
   switch (type) {
-    case 'VIP': return <User size={14} />;
-    case 'Group': return <Users size={14} />;
-    case '1-on-2': return <UserPlus size={14} />;
+    case 'VIP': return <User size={size} />;
+    case 'Group': return <Users size={size} />;
+    case '1-on-2': return <UserPlus size={size} />;
   }
 };
 
-export const ModeIcon = ({ mode }: { mode: ClassMode }) => {
+export const ModeIcon = ({ mode, size = 14 }: { mode: ClassMode, size?: number }) => {
   if (mode === 'online') {
-    return <Wifi size={14} className="text-blue-500" />;
+    return <Wifi size={size} className="text-blue-500" />;
   }
   return null;
 };
