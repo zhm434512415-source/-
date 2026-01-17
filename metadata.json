@@ -1,0 +1,5 @@
+{
+  "name": "Visual Class Scheduler",
+  "description": "A comprehensive, draggable class scheduling system featuring visual class management, recurring schedules, online/offline indicators, and image export capabilities.",
+  "requestFramePermissions": []
+}

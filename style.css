@@ -1,0 +1,29 @@
+/* 基础样式微调 */
+:root {
+  --app-bg: #f8fafc;
+}
+
+.dark {
+  --app-bg: #0f172a;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* 时间选择器样式优化 */
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.5);
+}
+
+.dark input[type="time"]::-webkit-calendar-picker-indicator,
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* 确保在拖拽时有视觉反馈 */
+.cursor-grab:active {
+  cursor: grabbing;
+}
