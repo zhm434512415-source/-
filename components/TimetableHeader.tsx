@@ -1,7 +1,20 @@
 
 import React from 'react';
 import { format, addMonths, subMonths } from 'date-fns';
-import { ChevronLeft, ChevronRight, Download, Calendar as CalendarIcon, Plus, Moon, Sun, Maximize, Save, FileUp } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Download, 
+  Calendar as CalendarIcon, 
+  Plus, 
+  Moon, 
+  Sun, 
+  Maximize, 
+  Save, 
+  FileUp,
+  Undo2,
+  Redo2
+} from 'lucide-react';
 
 interface TimetableHeaderProps {
   currentDate: Date;
@@ -13,10 +26,15 @@ interface TimetableHeaderProps {
   theme: 'light' | 'dark';
   onThemeToggle: () => void;
   onToggleFullscreen: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const TimetableHeader: React.FC<TimetableHeaderProps> = ({ 
-  currentDate, onDateChange, onExport, onSaveProject, onLoadProject, onCreateClass, theme, onThemeToggle, onToggleFullscreen 
+  currentDate, onDateChange, onExport, onSaveProject, onLoadProject, onCreateClass, theme, onThemeToggle, onToggleFullscreen,
+  onUndo, onRedo, canUndo, canRedo
 }) => {
   const monthStr = format(currentDate, 'yyyy年 MMMM');
 
@@ -27,7 +45,7 @@ const TimetableHeader: React.FC<TimetableHeaderProps> = ({
           <div className="bg-blue-600 p-1.5 rounded-lg">
             <CalendarIcon size={20} className="text-white" />
           </div>
-          <span className="hidden sm:inline">小萌英语工作室 <span className="text-xs opacity-60 font-mono ml-1">v1.2.0</span></span>
+          <span className="hidden sm:inline">小萌英语工作室 <span className="text-xs opacity-60 font-mono ml-1">v1.3.0</span></span>
         </h1>
         
         <div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
@@ -55,6 +73,30 @@ const TimetableHeader: React.FC<TimetableHeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+        {/* Undo/Redo Group */}
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            className={`p-1.5 rounded-md transition-all ${
+              canUndo ? 'hover:bg-white dark:hover:bg-slate-700 text-gray-600 dark:text-gray-400 shadow-sm' : 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50'
+            }`}
+            title="撤销 (Ctrl+Z)"
+          >
+            <Undo2 size={18} />
+          </button>
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded-md transition-all ${
+              canRedo ? 'hover:bg-white dark:hover:bg-slate-700 text-gray-600 dark:text-gray-400 shadow-sm' : 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50'
+            }`}
+            title="重做 (Ctrl+Y)"
+          >
+            <Redo2 size={18} />
+          </button>
+        </div>
+
         <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
           <button
             onClick={onThemeToggle}

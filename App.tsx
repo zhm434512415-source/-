@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ClassDefinition, ScheduledClass } from './types';
 import TimetableHeader from './components/TimetableHeader';
 import TimetableCell from './components/TimetableCell';
@@ -20,6 +20,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('schedule');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // 撤销/重做历史栈
+  const [past, setPast] = useState<ScheduledClass[][]>([]);
+  const [future, setFuture] = useState<ScheduledClass[][]>([]);
   
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,6 +45,33 @@ const App: React.FC = () => {
 
   const timetableRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
+
+  // 统一更新 Schedule 且记录历史
+  const updateScheduleWithHistory = useCallback((newSchedule: ScheduledClass[]) => {
+    setPast(prev => [...prev.slice(-49), schedule]); // 最多保留50步
+    setFuture([]);
+    setSchedule(newSchedule);
+  }, [schedule]);
+
+  const handleUndo = useCallback(() => {
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    const newPast = past.slice(0, past.length - 1);
+    
+    setFuture(prev => [schedule, ...prev]);
+    setPast(newPast);
+    setSchedule(previous);
+  }, [past, schedule]);
+
+  const handleRedo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[0];
+    const newFuture = future.slice(1);
+    
+    setPast(prev => [...prev, schedule]);
+    setFuture(newFuture);
+    setSchedule(next);
+  }, [future, schedule]);
 
   useEffect(() => {
     localStorage.setItem('classes', JSON.stringify(classes));
@@ -73,7 +104,6 @@ const App: React.FC = () => {
   }, [timelineRange]);
 
   const handleSaveClass = (classDef: ClassDefinition, recurring?: any) => {
-    // 如果有批量配置，将其保存到班级定义中，实现“记忆”
     const updatedClassDef = {
       ...classDef,
       batchConfig: recurring ? {
@@ -92,22 +122,21 @@ const App: React.FC = () => {
 
     if (recurring) {
       const { startDate, endDate, updateMode } = recurring;
-      setSchedule(prev => {
-        const otherClasses = prev.filter(s => s.id !== classDef.id);
-        const pastInstances = prev.filter(s => s.id === classDef.id && isBefore(new Date(s.date), today));
-        let futureInstancesToKeep = [];
-        if (updateMode === 'range') {
-          futureInstancesToKeep = prev.filter(s => 
-            s.id === classDef.id && !isBefore(new Date(s.date), today) && 
-            (isBefore(new Date(s.date), startDate) || isAfter(new Date(s.date), endDate))
-          );
-        }
-        const effectiveStart = isBefore(startDate, today) ? today : startDate;
-        const newInstances = applyRecurrence(updatedClassDef, { ...recurring, startDate: effectiveStart }, today);
-        return [...otherClasses, ...pastInstances, ...futureInstancesToKeep, ...newInstances];
-      });
+      const otherClasses = schedule.filter(s => s.id !== classDef.id);
+      const pastInstances = schedule.filter(s => s.id === classDef.id && isBefore(new Date(s.date), today));
+      let futureInstancesToKeep = [];
+      if (updateMode === 'range') {
+        futureInstancesToKeep = schedule.filter(s => 
+          s.id === classDef.id && !isBefore(new Date(s.date), today) && 
+          (isBefore(new Date(s.date), startDate) || isAfter(new Date(s.date), endDate))
+        );
+      }
+      const effectiveStart = isBefore(startDate, today) ? today : startDate;
+      const newInstances = applyRecurrence(updatedClassDef, { ...recurring, startDate: effectiveStart }, today);
+      
+      updateScheduleWithHistory([...otherClasses, ...pastInstances, ...futureInstancesToKeep, ...newInstances]);
     } else if (!isNew) {
-      setSchedule(prev => prev.map(s => (s.id === classDef.id && !isBefore(new Date(s.date), today)) ? { ...s, ...updatedClassDef } : s));
+      updateScheduleWithHistory(schedule.map(s => (s.id === classDef.id && !isBefore(new Date(s.date), today)) ? { ...s, ...updatedClassDef } : s));
     }
     setEditingClass(undefined);
   };
@@ -116,10 +145,9 @@ const App: React.FC = () => {
     const start = startOfDay(parseISO(startDateStr));
     const end = startOfDay(parseISO(endDateStr));
     
-    setSchedule(prev => prev.filter(s => {
+    updateScheduleWithHistory(schedule.filter(s => {
       if (s.id !== classId) return true;
       const classDate = startOfDay(parseISO(s.date));
-      // 如果课程在这个范围内，则删除
       const isInRange = (isAfter(classDate, start) || classDate.getTime() === start.getTime()) && 
                         (isBefore(classDate, end) || classDate.getTime() === end.getTime());
       return !isInRange;
@@ -128,14 +156,13 @@ const App: React.FC = () => {
   };
 
   const handleUpdateInstanceTime = (instanceId: string, startTime: string, endTime: string) => {
-    setSchedule(prev => prev.map(s => s.instanceId === instanceId ? { ...s, startTime, endTime } : s));
+    updateScheduleWithHistory(schedule.map(s => s.instanceId === instanceId ? { ...s, startTime, endTime } : s));
   };
 
   const performDrop = (date: string, classId: string) => {
     const classDef = classes.find(c => c.id === classId);
     if (!classDef) return;
     
-    // 如果班级有记忆配置，则使用记忆的时间
     const startTime = classDef.batchConfig?.startTime || "09:00";
     const endTime = classDef.batchConfig?.endTime || "10:30";
 
@@ -146,7 +173,7 @@ const App: React.FC = () => {
       startTime,
       endTime
     };
-    setSchedule(prev => [...prev, newInstance]);
+    updateScheduleWithHistory([...schedule, newInstance]);
     setDraggedClassId(null);
     setSelectedClassId(null);
   };
@@ -186,6 +213,8 @@ const App: React.FC = () => {
           if (data.classes && data.schedule) {
             setClasses(data.classes);
             setSchedule(data.schedule);
+            setPast([]);
+            setFuture([]);
             alert('读取存档成功！');
           }
         } catch (err) {
@@ -230,6 +259,10 @@ const App: React.FC = () => {
         theme={theme}
         onThemeToggle={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
         onToggleFullscreen={toggleFullscreen}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={past.length > 0}
+        canRedo={future.length > 0}
       />
 
       <div className="flex-1 flex overflow-hidden relative" onClick={() => setSelectedInstanceId(null)}>
@@ -317,7 +350,7 @@ const App: React.FC = () => {
                           if (draggedClassId) performDrop(dateKey, draggedClassId);
                           else if (selectedClassId) performDrop(dateKey, selectedClassId);
                         }}
-                        onRemoveInstance={(id) => setSchedule(prev => prev.filter(s => s.instanceId !== id))}
+                        onRemoveInstance={(id) => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))}
                         onEditInstance={(instance) => {
                           setEditingInstance(instance);
                           setIsInstanceModalOpen(true);
