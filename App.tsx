@@ -177,11 +177,9 @@ const App: React.FC = () => {
 
   const handleInstanceClick = (instance: ScheduledClass) => {
     if (selectedInstanceId === instance.instanceId) {
-      // If already selected, open the modal
       setEditingInstance(instance);
       setIsInstanceModalOpen(true);
     } else {
-      // Otherwise, just select it
       setSelectedInstanceId(instance.instanceId);
     }
   };
@@ -261,8 +259,8 @@ const App: React.FC = () => {
 
             <div className="flex flex-col">
               {weeks.map((week, wIdx) => (
-                <div key={wIdx} className="grid grid-cols-[60px_repeat(7,1fr)] border-b dark:border-slate-700 last:border-b-0 min-h-[400px]">
-                  <div className="bg-gray-50/50 dark:bg-slate-800/50 border-r dark:border-slate-700 flex flex-col relative py-2">
+                <div key={wIdx} className="grid grid-cols-[60px_repeat(7,1fr)] border-b dark:border-slate-700 last:border-b-0">
+                  <div className="bg-gray-50/50 dark:bg-slate-800/50 border-r dark:border-slate-700 flex flex-col relative py-2 min-h-[400px]">
                     {hours.map((h, i) => (
                       <div key={h} className="text-[10px] text-gray-400 dark:text-gray-500 h-[60px] flex items-start justify-center font-medium">
                         {h}
@@ -291,6 +289,22 @@ const App: React.FC = () => {
                           setIsInstanceModalOpen(true);
                         }}
                       />
+                    );
+                  })}
+
+                  {/* Income Row at the bottom of each week */}
+                  <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-gray-400 py-1.5">
+                    Income
+                  </div>
+                  {week.map(day => {
+                    const dateKey = format(day, 'yyyy-MM-dd');
+                    const dailyIncome = schedule
+                      .filter(s => s.date === dateKey)
+                      .reduce((sum, s) => sum + s.fee, 0);
+                    return (
+                      <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1.5">
+                        {dailyIncome > 0 ? dailyIncome : ''}
+                      </div>
                     );
                   })}
                 </div>
