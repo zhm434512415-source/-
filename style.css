@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* 基础样式微调 */
 :root {
   --app-bg: #f8fafc;
@@ -23,7 +27,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
 }
 
-/* 确保在拖拽时有视觉反馈 */
 .cursor-grab:active {
   cursor: grabbing;
 }
