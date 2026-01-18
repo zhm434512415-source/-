@@ -17,6 +17,7 @@ interface TimetableCellProps {
   onRemoveInstance: (instanceId: string) => void;
   onEditInstance: (instance: ScheduledClass) => void;
   scale: number;
+  isConfidential: boolean;
 }
 
 const TimetableCell: React.FC<TimetableCellProps> = ({ 
@@ -29,7 +30,8 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
   onDrop, 
   onRemoveInstance,
   onEditInstance,
-  scale
+  scale,
+  isConfidential
 }) => {
   const isToday = isSameDay(new Date(), date);
   const totalMinutes = timelineRange.max - timelineRange.min;
@@ -76,7 +78,11 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
           const startMin = timeToMinutes(item.startTime);
           const endMin = timeToMinutes(item.endTime);
           const top = (startMin - timelineRange.min) * pixelsPerMinute;
-          const height = Math.max((endMin - startMin) * pixelsPerMinute, 32);
+          
+          // 如果缩放比例大，且课程较短，卡片会自动撑开一点高度以容纳时间标签和图标
+          const minRequiredHeight = 38 * scale;
+          const height = Math.max((endMin - startMin) * pixelsPerMinute, minRequiredHeight);
+          
           const isSelected = selectedInstanceId === item.instanceId;
 
           return (
@@ -99,7 +105,6 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
                   }}
                   className="font-bold leading-none bg-white/60 dark:bg-black/30 px-1 py-0.5 rounded text-gray-800 dark:text-gray-100 border border-black/5 dark:border-white/5 cursor-pointer hover:bg-white/90 dark:hover:bg-black/50 transition-colors"
                   style={{ fontSize: `${8 * scale}px` }}
-                  title="修改课程时间"
                 >
                   {item.startTime}
                 </span>
@@ -125,23 +130,21 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
               </div>
               
               <div 
-                className="font-bold truncate leading-tight mt-1 text-gray-900 dark:text-white drop-shadow-sm"
+                className={`font-bold truncate leading-tight mt-1 text-gray-900 dark:text-white drop-shadow-sm transition-opacity duration-300 ${isConfidential ? 'opacity-0' : 'opacity-100'}`}
                 style={{ fontSize: `${10 * scale}px` }}
               >
                 {item.name}
               </div>
 
-              {height > 35 * scale && (
-                <div className="flex items-center justify-between font-bold opacity-90 mt-auto text-gray-800 dark:text-white/90" style={{ fontSize: `${7 * scale}px` }}>
-                  <span className="flex items-center gap-0.5">
-                    {getClassTypeIcon(item.type, 10 * scale)}
-                    {item.type === 'Group' ? item.capacity : ''}
-                  </span>
-                  <span className="bg-white/40 dark:bg-black/20 px-1 rounded border border-black/5 dark:border-white/5">
-                    ¥{item.fee}
-                  </span>
-                </div>
-              )}
+              <div className="flex items-center justify-between font-bold opacity-90 mt-auto text-gray-800 dark:text-white/90" style={{ fontSize: `${7 * scale}px` }}>
+                <span className="flex items-center gap-0.5">
+                  {getClassTypeIcon(item.type, 10 * scale)}
+                  {!isConfidential && item.type === 'Group' ? item.capacity : ''}
+                </span>
+                <span className={`bg-white/40 dark:bg-black/20 px-1 rounded border border-black/5 dark:border-white/5 whitespace-nowrap transition-opacity duration-300 ${isConfidential ? 'opacity-0' : 'opacity-100'}`}>
+                  ¥{item.fee}
+                </span>
+              </div>
             </div>
           );
         })}

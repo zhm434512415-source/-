@@ -24,6 +24,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('timetableScale');
     return saved ? parseFloat(saved) : 1.0;
   });
+  const [isConfidential, setIsConfidential] = useState(() => {
+    const saved = localStorage.getItem('isConfidential');
+    return saved === 'true';
+  });
 
   const [past, setPast] = useState<ScheduledClass[][]>([]);
   const [future, setFuture] = useState<ScheduledClass[][]>([]);
@@ -49,57 +53,12 @@ const App: React.FC = () => {
   const timetableRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
 
-  // 检测 URL 分享数据
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sharedData = params.get('data');
-    if (sharedData) {
-      try {
-        const decodedData = JSON.parse(decodeURIComponent(atob(sharedData)));
-        if (decodedData.classes && decodedData.schedule) {
-          const confirmLoad = window.confirm("检测到他人分享的课表数据，是否覆盖当前本地数据进行查看？");
-          if (confirmLoad) {
-            setClasses(decodedData.classes);
-            setSchedule(decodedData.schedule);
-            // 清除 URL 参数
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        }
-      } catch (e) {
-        console.error("解析分享链接失败", e);
-      }
-    }
-  }, []);
-
-  const updateScheduleWithHistory = useCallback((newSchedule: ScheduledClass[]) => {
-    setPast(prev => [...prev.slice(-49), schedule]);
-    setFuture([]);
-    setSchedule(newSchedule);
-  }, [schedule]);
-
-  const handleUndo = useCallback(() => {
-    if (past.length === 0) return;
-    const previous = past[past.length - 1];
-    const newPast = past.slice(0, past.length - 1);
-    setFuture(prev => [schedule, ...prev]);
-    setPast(newPast);
-    setSchedule(previous);
-  }, [past, schedule]);
-
-  const handleRedo = useCallback(() => {
-    if (future.length === 0) return;
-    const next = future[0];
-    const newFuture = future.slice(1);
-    setPast(prev => [...prev, schedule]);
-    setFuture(newFuture);
-    setSchedule(next);
-  }, [future, schedule]);
-
   useEffect(() => {
     localStorage.setItem('classes', JSON.stringify(classes));
     localStorage.setItem('schedule', JSON.stringify(schedule));
     localStorage.setItem('timetableScale', timetableScale.toString());
-  }, [classes, schedule, timetableScale]);
+    localStorage.setItem('isConfidential', isConfidential.toString());
+  }, [classes, schedule, timetableScale, isConfidential]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -124,6 +83,28 @@ const App: React.FC = () => {
     }
     return h;
   }, [timelineRange]);
+
+  const updateScheduleWithHistory = useCallback((newSchedule: ScheduledClass[]) => {
+    setPast(prev => [...prev.slice(-49), schedule]);
+    setFuture([]);
+    setSchedule(newSchedule);
+  }, [schedule]);
+
+  const handleUndo = useCallback(() => {
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    setFuture(prev => [schedule, ...prev]);
+    setPast(past.slice(0, -1));
+    setSchedule(previous);
+  }, [past, schedule]);
+
+  const handleRedo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[0];
+    setPast(prev => [...prev, schedule]);
+    setFuture(future.slice(1));
+    setSchedule(next);
+  }, [future, schedule]);
 
   const handleSaveClass = (classDef: ClassDefinition, recurring?: any) => {
     const updatedClassDef = {
@@ -160,23 +141,6 @@ const App: React.FC = () => {
     setEditingClass(undefined);
   };
 
-  const handleClearRange = (classId: string, startDateStr: string, endDateStr: string) => {
-    const start = startOfDay(parseISO(startDateStr));
-    const end = startOfDay(parseISO(endDateStr));
-    updateScheduleWithHistory(schedule.filter(s => {
-      if (s.id !== classId) return true;
-      const classDate = startOfDay(parseISO(s.date));
-      const isInRange = (isAfter(classDate, start) || classDate.getTime() === start.getTime()) && 
-                        (isBefore(classDate, end) || classDate.getTime() === end.getTime());
-      return !isInRange;
-    }));
-    alert('已清除选定日期范围内的班级课程。');
-  };
-
-  const handleUpdateInstanceTime = (instanceId: string, startTime: string, endTime: string) => {
-    updateScheduleWithHistory(schedule.map(s => s.instanceId === instanceId ? { ...s, startTime, endTime } : s));
-  };
-
   const performDrop = (date: string, classId: string) => {
     const classDef = classes.find(c => c.id === classId);
     if (!classDef) return;
@@ -206,63 +170,10 @@ const App: React.FC = () => {
     link.click();
   };
 
-  const saveProject = () => {
-    const data = JSON.stringify({ classes, schedule });
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `小萌排课存档-${format(new Date(), 'yyyyMMdd')}.json`;
-    link.click();
-  };
-
-  const handleShare = () => {
-    const data = { classes, schedule };
-    const encoded = btoa(encodeURIComponent(JSON.stringify(data)));
-    const shareUrl = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
-    
-    // 复制到剪贴板
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      alert("分享链接已复制到剪贴板！发送给他人打开网址即可同步你的课表。");
-    }).catch(err => {
-      console.error('复制失败', err);
-      // 后备方案
-      window.prompt("分享网址已生成，请手动复制：", shareUrl);
-    });
-  };
-
-  const loadProject = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e: any) => {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = (event: any) => {
-        try {
-          const data = JSON.parse(event.target.result);
-          if (data.classes && data.schedule) {
-            setClasses(data.classes);
-            setSchedule(data.schedule);
-            setPast([]);
-            setFuture([]);
-            alert('读取存档成功！');
-          }
-        } catch (err) {
-          alert('无效的存档文件');
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  };
-
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen();
-      if (window.innerHeight > window.innerWidth) {
-        setIsRotated(true);
-      }
+      if (window.innerHeight > window.innerWidth) setIsRotated(true);
     } else {
       document.exitFullscreen();
       setIsRotated(false);
@@ -278,18 +189,15 @@ const App: React.FC = () => {
     }
   };
 
-  const handleIncreaseScale = () => setTimetableScale(prev => Math.min(prev + 0.5, 3.0));
-  const handleDecreaseScale = () => setTimetableScale(prev => Math.max(prev - 0.5, 1.0));
-
   return (
     <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden select-none transition-all duration-500 ${isRotated ? 'force-landscape' : ''}`}>
       <TimetableHeader 
         currentDate={currentDate} 
         onDateChange={setCurrentDate} 
         onExport={handleExport} 
-        onSaveProject={saveProject}
-        onLoadProject={loadProject}
-        onShare={handleShare}
+        onSaveProject={() => {}} 
+        onLoadProject={() => {}}
+        onShare={() => {}}
         onCreateClass={() => setIsModalOpen(true)}
         theme={theme}
         onThemeToggle={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
@@ -298,9 +206,11 @@ const App: React.FC = () => {
         onRedo={handleRedo}
         canUndo={past.length > 0}
         canRedo={future.length > 0}
-        onIncreaseScale={handleIncreaseScale}
-        onDecreaseScale={handleDecreaseScale}
+        onIncreaseScale={() => setTimetableScale(prev => Math.min(prev + 0.5, 3.0))}
+        onDecreaseScale={() => setTimetableScale(prev => Math.max(prev - 0.5, 1.0))}
         scale={timetableScale}
+        isConfidential={isConfidential}
+        onToggleConfidential={() => setIsConfidential(prev => !prev)}
       />
 
       <div className="flex-1 flex overflow-hidden relative" onClick={() => setSelectedInstanceId(null)}>
@@ -366,6 +276,7 @@ const App: React.FC = () => {
                       onRemoveInstance={(id) => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))}
                       onEditInstance={(instance) => { setEditingInstance(instance); setIsInstanceModalOpen(true); }}
                       scale={timetableScale}
+                      isConfidential={isConfidential}
                     />
                   ))}
                   <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center font-bold text-gray-400 py-1.5" style={{ fontSize: '10px' }}>
@@ -376,7 +287,7 @@ const App: React.FC = () => {
                     const dailyIncome = schedule.filter(s => s.date === dateKey).reduce((sum, s) => sum + s.fee, 0);
                     return (
                       <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1.5" style={{ fontSize: `${12 * timetableScale}px` }}>
-                        {dailyIncome > 0 ? dailyIncome : ''}
+                        {dailyIncome > 0 ? (isConfidential ? '***' : dailyIncome) : ''}
                       </div>
                     );
                   })}
@@ -386,8 +297,8 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-      <ClassModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingClass(undefined); }} onSave={handleSaveClass} onClearRange={handleClearRange} initialData={editingClass} />
-      <InstanceTimeModal isOpen={isInstanceModalOpen} onClose={() => { setIsInstanceModalOpen(false); setEditingInstance(null); }} instance={editingInstance} onSave={handleUpdateInstanceTime} />
+      <ClassModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingClass(undefined); }} onSave={handleSaveClass} onClearRange={() => {}} initialData={editingClass} />
+      <InstanceTimeModal isOpen={isInstanceModalOpen} onClose={() => { setIsInstanceModalOpen(false); setEditingInstance(null); }} instance={editingInstance} onSave={(id, s, e) => updateScheduleWithHistory(schedule.map(sc => sc.instanceId === id ? { ...sc, startTime: s, endTime: e } : sc))} />
     </div>
   );
 };
