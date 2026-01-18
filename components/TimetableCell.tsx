@@ -127,21 +127,23 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
               </div>
               
               <div 
-                className={`font-bold truncate leading-tight mt-1 text-gray-900 dark:text-white drop-shadow-sm transition-opacity duration-300 ${isConfidential ? 'opacity-0 select-none' : 'opacity-100'}`}
+                className="font-bold truncate leading-tight mt-1 text-gray-900 dark:text-white drop-shadow-sm"
                 style={{ fontSize: `${10 * scale}px` }}
               >
-                {item.name}
+                <span className={isConfidential ? 'mosaic-blur block w-full' : 'transition-opacity duration-300'}>
+                  {item.name}
+                </span>
               </div>
 
               {height > 35 * scale && (
                 <div className="flex items-center justify-between font-bold opacity-90 mt-auto text-gray-800 dark:text-white/90" style={{ fontSize: `${7 * scale}px` }}>
                   <span className="flex items-center gap-0.5">
                     {getClassTypeIcon(item.type, 10 * scale)}
-                    <span className={isConfidential ? 'hidden' : ''}>
+                    <span className={isConfidential ? 'mosaic-blur' : ''}>
                       {item.type === 'Group' ? item.capacity : ''}
                     </span>
                   </span>
-                  <span className={`bg-white/40 dark:bg-black/20 px-1 rounded border border-black/5 dark:border-white/5 transition-opacity duration-300 ${isConfidential ? 'opacity-0 select-none' : 'opacity-100'}`}>
+                  <span className={`bg-white/40 dark:bg-black/20 px-1 rounded border border-black/5 dark:border-white/5 transition-all duration-300 ${isConfidential ? 'mosaic-blur' : ''}`}>
                     ¥{item.fee}
                   </span>
                 </div>

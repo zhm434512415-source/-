@@ -9,9 +9,10 @@ interface ClassCardProps {
   onDragStart: (e: React.DragEvent, id: string) => void;
   onEdit: (classDef: ClassDefinition) => void;
   onDelete: (id: string) => void;
+  isConfidential?: boolean;
 }
 
-const ClassCard: React.FC<ClassCardProps> = ({ classDef, onDragStart, onEdit, onDelete }) => {
+const ClassCard: React.FC<ClassCardProps> = ({ classDef, onDragStart, onEdit, onDelete, isConfidential = false }) => {
   return (
     <div
       draggable
@@ -21,16 +22,24 @@ const ClassCard: React.FC<ClassCardProps> = ({ classDef, onDragStart, onEdit, on
       <div className="flex justify-between items-start">
         <div className="flex-1">
           <h4 className="font-bold text-sm flex items-center gap-1 dark:text-white">
-            {classDef.name}
-            <ModeIcon mode={classDef.mode} />
+            <span className={isConfidential ? 'mosaic-blur' : 'transition-all duration-300'}>
+              {classDef.name}
+            </span>
+            <span className={isConfidential ? 'hidden' : ''}>
+              <ModeIcon mode={classDef.mode} />
+            </span>
           </h4>
           <div className="flex items-center gap-2 mt-1 text-xs text-gray-600 dark:text-gray-400">
             <span className="flex items-center gap-1">
               {getClassTypeIcon(classDef.type)}
-              {classDef.type === 'Group' ? `${classDef.capacity}人` : classDef.type}
+              <span className={isConfidential ? 'mosaic-blur' : 'transition-all duration-300'}>
+                {classDef.type === 'Group' ? `${classDef.capacity}人` : classDef.type}
+              </span>
             </span>
             <span>•</span>
-            <span>¥{classDef.fee}</span>
+            <span className={isConfidential ? 'mosaic-blur' : 'transition-all duration-300'}>
+              ¥{classDef.fee}
+            </span>
           </div>
         </div>
         <div className="flex gap-1">

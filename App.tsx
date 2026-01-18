@@ -323,7 +323,13 @@ const App: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
               {classes.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
                 <div key={c.id} className={`relative transition-all ${selectedClassId === c.id ? 'ring-2 ring-blue-500 ring-offset-2 rounded-lg' : ''}`} onClick={() => setSelectedClassId(c.id === selectedClassId ? null : c.id)}>
-                  <ClassCard classDef={c} onDragStart={(_, id) => setDraggedClassId(id)} onEdit={(def) => { setEditingClass(def); setIsModalOpen(true); }} onDelete={(id) => setClasses(prev => prev.filter(x => x.id !== id))} />
+                  <ClassCard 
+                    classDef={c} 
+                    onDragStart={(_, id) => setDraggedClassId(id)} 
+                    onEdit={(def) => { setEditingClass(def); setIsModalOpen(true); }} 
+                    onDelete={(id) => setClasses(prev => prev.filter(x => x.id !== id))}
+                    isConfidential={isConfidential}
+                  />
                 </div>
               ))}
             </div>
@@ -379,7 +385,11 @@ const App: React.FC = () => {
                     const dailyIncome = schedule.filter(s => s.date === dateKey).reduce((sum, s) => sum + s.fee, 0);
                     return (
                       <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1.5" style={{ fontSize: `${12 * timetableScale}px` }}>
-                        {dailyIncome > 0 ? (isConfidential ? '***' : dailyIncome) : ''}
+                        {dailyIncome > 0 ? (
+                          <span className={isConfidential ? 'mosaic-blur' : ''}>
+                            {dailyIncome}
+                          </span>
+                        ) : ''}
                       </div>
                     );
                   })}
