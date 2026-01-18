@@ -32,15 +32,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: grabbing;
 }
 
-/* 眨眼动画 */
-@keyframes eye-blink {
-  0%, 100% { transform: scaleY(1); }
-  5% { transform: scaleY(0.1); }
-  10% { transform: scaleY(1); }
+/* 闪烁动画用于保密模式眼球 */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
-
-.animate-eye-blink {
-  animation: eye-blink 4s infinite ease-in-out;
+.animate-blink {
+  animation: blink 2s infinite ease-in-out;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
