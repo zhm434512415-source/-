@@ -28,6 +28,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('isConfidential');
     return saved === 'true';
   });
+  const [isMobileMode, setIsMobileMode] = useState(() => {
+    const saved = localStorage.getItem('isMobileMode');
+    return saved === 'true';
+  });
 
   const [past, setPast] = useState<ScheduledClass[][]>([]);
   const [future, setFuture] = useState<ScheduledClass[][]>([]);
@@ -47,16 +51,25 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => 
     (localStorage.getItem('theme') as 'light' | 'dark') || 'light'
   );
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobileMode);
   const [isRotated, setIsRotated] = useState(false);
 
   const timetableRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
 
-  // 检测 URL 分享数据
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sharedData = params.get('data');
+  // 改进的解析分享逻辑
+  const parseSharedData = useCallback(() => {
+    const hash = window.location.hash;
+    const search = window.location.search;
+    let sharedData = '';
+
+    if (hash.includes('data=')) {
+      sharedData = hash.split('data=')[1];
+    } else if (search.includes('data=')) {
+      const params = new URLSearchParams(search);
+      sharedData = params.get('data') || '';
+    }
+
     if (sharedData) {
       try {
         const decodedData = JSON.parse(decodeURIComponent(atob(sharedData)));
@@ -66,20 +79,27 @@ const App: React.FC = () => {
             setClasses(decodedData.classes);
             setSchedule(decodedData.schedule);
             window.history.replaceState({}, document.title, window.location.pathname);
+            alert("数据同步成功！");
           }
         }
       } catch (e) {
         console.error("解析分享链接失败", e);
+        alert("分享链接无效或数据已损坏。");
       }
     }
   }, []);
+
+  useEffect(() => {
+    parseSharedData();
+  }, [parseSharedData]);
 
   useEffect(() => {
     localStorage.setItem('classes', JSON.stringify(classes));
     localStorage.setItem('schedule', JSON.stringify(schedule));
     localStorage.setItem('timetableScale', timetableScale.toString());
     localStorage.setItem('isConfidential', isConfidential.toString());
-  }, [classes, schedule, timetableScale, isConfidential]);
+    localStorage.setItem('isMobileMode', isMobileMode.toString());
+  }, [classes, schedule, timetableScale, isConfidential, isMobileMode]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -200,14 +220,52 @@ const App: React.FC = () => {
 
   const handleExport = async () => {
     if (!timetableRef.current) return;
-    const canvas = await html2canvas(timetableRef.current, { 
-      scale: 2, 
-      backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff' 
-    });
-    const link = document.createElement('a');
-    link.download = `小萌英语课表-${format(currentDate, 'yyyy-MM')}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    
+    const loadingToast = document.createElement('div');
+    loadingToast.innerHTML = '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:white;padding:20px 40px;border-radius:10px;z-index:99999;font-weight:bold;">图片生成中，请稍候...</div>';
+    document.body.appendChild(loadingToast);
+
+    try {
+      const originalWidth = timetableRef.current.offsetWidth;
+
+      const canvas = await html2canvas(timetableRef.current, { 
+        scale: 2, 
+        useCORS: true,
+        logging: false,
+        backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+        width: originalWidth,
+        onclone: (clonedDoc) => {
+          const clonedContainer = clonedDoc.body.querySelector('.timetable-container') as HTMLElement;
+          if (clonedContainer) {
+            clonedContainer.style.width = `${originalWidth}px`;
+          }
+
+          const stickyElements = clonedDoc.querySelectorAll('.sticky');
+          stickyElements.forEach(el => {
+            (el as HTMLElement).style.position = 'relative';
+          });
+
+          const scheduleItems = clonedDoc.querySelectorAll('.group\\/item');
+          scheduleItems.forEach(el => {
+            const htmlEl = el as HTMLElement;
+            htmlEl.style.overflow = 'visible';
+            htmlEl.style.boxShadow = 'none';
+            const spans = htmlEl.querySelectorAll('span');
+            spans.forEach(s => (s as HTMLElement).style.display = 'inline-block');
+          });
+        }
+      });
+
+      const link = document.createElement('a');
+      link.download = `小萌英语课表-${format(currentDate, 'yyyy-MM')}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+    } catch (err) {
+      console.error('导出失败:', err);
+      alert('导出图片失败，请重试');
+    } finally {
+      document.body.removeChild(loadingToast);
+    }
   };
 
   const saveProject = () => {
@@ -222,12 +280,19 @@ const App: React.FC = () => {
 
   const handleShare = () => {
     const data = { classes, schedule };
-    const encoded = btoa(encodeURIComponent(JSON.stringify(data)));
-    const shareUrl = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
+    const jsonStr = JSON.stringify(data);
+    
+    if (jsonStr.length > 30000) {
+      alert("警告：数据量过大，建议导出 JSON 存档。");
+    }
+
+    const encoded = btoa(encodeURIComponent(jsonStr));
+    const shareUrl = `${window.location.origin}${window.location.pathname}#data=${encoded}`;
+    
     navigator.clipboard.writeText(shareUrl).then(() => {
-      alert("分享链接已复制到剪贴板！发送给他人打开网址即可同步你的课表。");
+      alert("分享链接已复制！手机打开此链接即可同步。");
     }).catch(err => {
-      window.prompt("分享网址已生成，请手动复制：", shareUrl);
+      window.prompt("请手动复制链接：", shareUrl);
     });
   };
 
@@ -281,8 +346,20 @@ const App: React.FC = () => {
   const handleIncreaseScale = () => setTimetableScale(prev => Math.min(prev + 0.5, 3.0));
   const handleDecreaseScale = () => setTimetableScale(prev => Math.max(prev - 0.5, 1.0));
 
+  const toggleMobileMode = () => {
+    const nextMode = !isMobileMode;
+    setIsMobileMode(nextMode);
+    if (nextMode) {
+      setIsSidebarCollapsed(true);
+      setTimetableScale(0.8); // 自动缩小以适配 iPhone
+    } else {
+      setIsSidebarCollapsed(false);
+      setTimetableScale(1.0);
+    }
+  };
+
   return (
-    <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden select-none transition-all duration-500 ${isRotated ? 'force-landscape' : ''}`}>
+    <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden select-none transition-all duration-500 ${isRotated ? 'force-landscape' : ''} ${isMobileMode ? 'is-mobile-ui' : ''}`}>
       <TimetableHeader 
         currentDate={currentDate} 
         onDateChange={setCurrentDate} 
@@ -303,6 +380,8 @@ const App: React.FC = () => {
         scale={timetableScale}
         isConfidential={isConfidential}
         onToggleConfidential={() => setIsConfidential(!isConfidential)}
+        isMobileMode={isMobileMode}
+        onToggleMobileMode={toggleMobileMode}
       />
 
       <div className="flex-1 flex overflow-hidden relative" onClick={() => setSelectedInstanceId(null)}>
@@ -339,21 +418,21 @@ const App: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-slate-100/30 dark:bg-slate-900/50 p-4 sm:p-6 custom-scrollbar">
-          <div ref={timetableRef} className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-200 dark:border-slate-800 min-w-[1000px] overflow-hidden">
-            <div className="grid grid-cols-[60px_repeat(7,1fr)] bg-gray-50 dark:bg-slate-800 border-b dark:border-slate-700">
+        <div className={`flex-1 overflow-auto bg-slate-100/30 dark:bg-slate-900/50 ${isMobileMode ? 'p-1' : 'p-4 sm:p-6'} custom-scrollbar`}>
+          <div ref={timetableRef} className={`timetable-container bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-200 dark:border-slate-800 overflow-hidden ${isMobileMode ? 'min-w-[700px]' : 'min-w-[1000px]'}`}>
+            <div className="grid grid-cols-[50px_repeat(7,1fr)] sm:grid-cols-[60px_repeat(7,1fr)] bg-gray-50 dark:bg-slate-800 border-b dark:border-slate-700">
               <div className="border-r dark:border-slate-700"></div>
               {['一', '二', '三', '四', '五', '六', '日'].map(d => (
-                <div key={d} style={{ fontSize: `${12 * timetableScale}px` }} className="py-2 text-center font-bold text-gray-500 dark:text-gray-400 border-r dark:border-slate-700 last:border-r-0">周{d}</div>
+                <div key={d} style={{ fontSize: `${(isMobileMode ? 10 : 12) * timetableScale}px` }} className="py-2 text-center font-bold text-gray-500 dark:text-gray-400 border-r dark:border-slate-700 last:border-r-0">周{d}</div>
               ))}
             </div>
 
             <div className="flex flex-col">
               {weeks.map((week, wIdx) => (
-                <div key={wIdx} className="grid grid-cols-[60px_repeat(7,1fr)] border-b dark:border-slate-700 last:border-b-0">
+                <div key={wIdx} className="grid grid-cols-[50px_repeat(7,1fr)] sm:grid-cols-[60px_repeat(7,1fr)] border-b dark:border-slate-700 last:border-b-0">
                   <div className="bg-gray-50/50 dark:bg-slate-800/50 border-r dark:border-slate-700 flex flex-col relative py-2 min-h-[400px]">
                     {hours.map((h, i) => (
-                      <div key={h} className="text-[10px] text-gray-400 dark:text-gray-500 h-[60px] flex items-start justify-center font-medium">
+                      <div key={h} className="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 h-[60px] flex items-start justify-center font-medium">
                         {h}
                       </div>
                     ))}
@@ -377,14 +456,14 @@ const App: React.FC = () => {
                       isConfidential={isConfidential}
                     />
                   ))}
-                  <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center font-bold text-gray-400 py-1.5" style={{ fontSize: '10px' }}>
-                    Income
+                  <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center font-bold text-gray-400 py-1" style={{ fontSize: '9px' }}>
+                    $
                   </div>
                   {week.map(day => {
                     const dateKey = format(day, 'yyyy-MM-dd');
                     const dailyIncome = schedule.filter(s => s.date === dateKey).reduce((sum, s) => sum + s.fee, 0);
                     return (
-                      <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1.5" style={{ fontSize: `${12 * timetableScale}px` }}>
+                      <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1" style={{ fontSize: `${(isMobileMode ? 10 : 12) * timetableScale}px` }}>
                         {dailyIncome > 0 ? (
                           <span className={isConfidential ? 'mosaic-blur' : ''}>
                             {dailyIncome}

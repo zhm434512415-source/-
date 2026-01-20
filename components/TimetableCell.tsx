@@ -88,18 +88,18 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
                 e.stopPropagation(); 
                 onInstanceClick(item); 
               }}
-              className={`absolute left-1 right-1 rounded border shadow-sm transition-all p-1 flex flex-col overflow-hidden group/item ${item.color} ${
+              className={`absolute left-1 right-1 rounded border shadow-sm transition-all p-1 flex flex-col group/item ${item.color} ${
                 isSelected ? 'ring-2 ring-blue-600 ring-offset-1 z-40 scale-[1.02] shadow-xl' : 'hover:brightness-95 hover:z-30'
               }`}
-              style={{ top: `${top}px`, height: `${height}px` }}
+              style={{ top: `${top}px`, height: `${height}px`, overflow: 'visible' }}
             >
-              <div className="flex items-start justify-between relative z-10">
+              <div className="flex items-start justify-between relative z-10 mb-0.5">
                 <span 
                   onClick={(e) => { 
                     e.stopPropagation(); 
                     onEditInstance(item); 
                   }}
-                  className="font-bold leading-none bg-white/60 dark:bg-black/30 px-1 py-0.5 rounded text-gray-800 dark:text-gray-100 border border-black/5 dark:border-white/5 cursor-pointer hover:bg-white/90 dark:hover:bg-black/50 transition-colors"
+                  className="font-bold leading-normal bg-white/70 dark:bg-black/40 px-1 py-0 rounded text-gray-800 dark:text-gray-100 border border-black/10 dark:border-white/10 cursor-pointer hover:bg-white/90 dark:hover:bg-black/60 transition-colors inline-block whitespace-nowrap"
                   style={{ fontSize: `${8 * scale}px` }}
                   title="修改课程时间"
                 >
@@ -119,7 +119,7 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
                       e.stopPropagation(); 
                       onRemoveInstance(item.instanceId); 
                     }}
-                    className="opacity-40 lg:opacity-0 group-hover/item:opacity-100 p-1 hover:bg-black/10 rounded transition-all active:scale-90"
+                    className="opacity-40 lg:opacity-0 group-hover/item:opacity-100 p-0.5 hover:bg-black/10 rounded transition-all active:scale-90"
                   >
                     <Trash2 size={12} style={{ transform: `scale(${scale})`, transformOrigin: 'center' }} className="text-gray-900 dark:text-white" />
                   </button>
@@ -127,7 +127,7 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
               </div>
               
               <div 
-                className="font-bold truncate leading-tight mt-1 text-gray-900 dark:text-white drop-shadow-sm"
+                className="font-bold truncate leading-tight text-gray-900 dark:text-white drop-shadow-sm flex-1"
                 style={{ fontSize: `${10 * scale}px` }}
               >
                 <span className={isConfidential ? 'mosaic-blur block w-full' : 'transition-opacity duration-300'}>
@@ -136,7 +136,7 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
               </div>
 
               {height > 35 * scale && (
-                <div className="flex items-center justify-between font-bold opacity-90 mt-auto text-gray-800 dark:text-white/90" style={{ fontSize: `${7 * scale}px` }}>
+                <div className="flex items-center justify-between font-bold opacity-90 mt-0.5 text-gray-800 dark:text-white/90" style={{ fontSize: `${7 * scale}px` }}>
                   <span className="flex items-center gap-0.5">
                     {getClassTypeIcon(item.type, 10 * scale)}
                     <span className={isConfidential ? 'mosaic-blur' : ''}>
