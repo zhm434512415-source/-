@@ -6,10 +6,14 @@ import TimetableCell from './components/TimetableCell';
 import ClassCard from './components/ClassCard';
 import ClassModal from './components/ClassModal';
 import InstanceTimeModal from './components/InstanceTimeModal';
+import SyncModal from './components/SyncModal';
 import { generateMonthDays, applyRecurrence, getTimelineRange } from './utils';
 import { format, startOfDay, isBefore, isAfter, isSameMonth, parseISO } from 'date-fns';
 import { Search, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import html2canvas from 'html2canvas';
+
+// 使用自定义的 Bucket 命名空间，确保不与其他应用冲突
+const SYNC_API_BASE = "https://kvdb.io/v1/buckets/xiaomeng_studio_v2_prod/keys";
 
 const App: React.FC = () => {
   const [classes, setClasses] = useState<ClassDefinition[]>(() => {
@@ -32,6 +36,13 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('isMobileMode');
     return saved === 'true';
   });
+
+  // 云同步状态
+  const [syncId, setSyncId] = useState<string | null>(localStorage.getItem('syncId'));
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const skipNextPush = useRef(false);
 
   const [past, setPast] = useState<ScheduledClass[][]>([]);
   const [future, setFuture] = useState<ScheduledClass[][]>([]);
@@ -57,49 +68,138 @@ const App: React.FC = () => {
   const timetableRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
 
-  // 改进的解析分享逻辑
-  const parseSharedData = useCallback(() => {
-    const hash = window.location.hash;
-    const search = window.location.search;
-    let sharedData = '';
-
-    if (hash.includes('data=')) {
-      sharedData = hash.split('data=')[1];
-    } else if (search.includes('data=')) {
-      const params = new URLSearchParams(search);
-      sharedData = params.get('data') || '';
+  // 云端推送
+  const pushToCloud = useCallback(async (dataToPush: any, forceId?: string) => {
+    const targetId = forceId || syncId;
+    if (!targetId || skipNextPush.current) {
+      skipNextPush.current = false;
+      return;
     }
 
-    if (sharedData) {
-      try {
-        const decodedData = JSON.parse(decodeURIComponent(atob(sharedData)));
-        if (decodedData.classes && decodedData.schedule) {
-          const confirmLoad = window.confirm("检测到他人分享的课表数据，是否覆盖当前本地数据进行查看？");
-          if (confirmLoad) {
-            setClasses(decodedData.classes);
-            setSchedule(decodedData.schedule);
-            window.history.replaceState({}, document.title, window.location.pathname);
-            alert("数据同步成功！");
-          }
-        }
-      } catch (e) {
-        console.error("解析分享链接失败", e);
-        alert("分享链接无效或数据已损坏。");
+    setSyncStatus('syncing');
+    try {
+      const response = await fetch(`${SYNC_API_BASE}/${targetId}`, {
+        method: 'PUT',
+        body: JSON.stringify(dataToPush),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        setSyncStatus('synced');
+        setLastSynced(new Date());
+      } else {
+        throw new Error(`Server returned ${response.status}`);
       }
+    } catch (err) {
+      console.error('Push Error:', err);
+      setSyncStatus('error');
     }
-  }, []);
+  }, [syncId]);
 
-  useEffect(() => {
-    parseSharedData();
-  }, [parseSharedData]);
+  // 云端拉取
+  const pullFromCloud = useCallback(async () => {
+    if (!syncId) return;
+    // 如果后台不可见，除非弹窗开着，否则不更新
+    if (document.visibilityState !== 'visible' && !isSyncModalOpen) return;
+    
+    setSyncStatus('syncing');
+    try {
+      const response = await fetch(`${SYNC_API_BASE}/${syncId}`);
+      if (response.ok) {
+        const text = await response.text();
+        if (!text) {
+          // 路径存在但内容为空，初始化一次
+          pushToCloud({ classes, schedule });
+          return;
+        }
+        
+        const cloudData = JSON.parse(text);
+        const localDataString = JSON.stringify({ classes, schedule });
+        const cloudDataString = JSON.stringify(cloudData);
+        
+        if (localDataString !== cloudDataString) {
+          console.log("检测到云端更新...");
+          skipNextPush.current = true;
+          setClasses(cloudData.classes);
+          setSchedule(cloudData.schedule);
+        }
+        setSyncStatus('synced');
+        setLastSynced(new Date());
+      } else if (response.status === 404) {
+        // 第一次使用这个自定义码，自动创建路径
+        console.log("新同步码，正在上传初始数据...");
+        pushToCloud({ classes, schedule });
+      } else {
+        throw new Error(`Server returned ${response.status}`);
+      }
+    } catch (err) {
+      console.error('Pull Error:', err);
+      setSyncStatus('error');
+    }
+  }, [syncId, classes, schedule, isSyncModalOpen, pushToCloud]);
 
+  // 数据监听与自动保存
   useEffect(() => {
     localStorage.setItem('classes', JSON.stringify(classes));
     localStorage.setItem('schedule', JSON.stringify(schedule));
+  }, [classes, schedule]);
+
+  // 自动推送防抖
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      pushToCloud({ classes, schedule });
+    }, 2000); 
+    return () => clearTimeout(timer);
+  }, [classes, schedule, pushToCloud]);
+
+  // 定期同步逻辑
+  useEffect(() => {
+    if (!syncId) return;
+    pullFromCloud(); 
+    const interval = setInterval(pullFromCloud, 120000); // 2分钟轮询
+    
+    const handleFocus = () => pullFromCloud();
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [syncId, pullFromCloud]);
+
+  // 同步管理函数
+  const handleEnableSync = () => {
+    // 生成一个随机码
+    const randomId = Math.random().toString(36).substring(2, 10).toUpperCase();
+    handleJoinSync(randomId);
+  };
+
+  const handleJoinSync = (id: string) => {
+    const cleanId = id.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!cleanId) return;
+    
+    setSyncId(cleanId);
+    localStorage.setItem('syncId', cleanId);
+    // 强制执行一次推/拉
+    pullFromCloud();
+  };
+
+  const handleDisableSync = () => {
+    if (window.confirm("确定断开云同步吗？")) {
+      setSyncId(null);
+      localStorage.removeItem('syncId');
+      setSyncStatus('idle');
+    }
+  };
+
+  // 其它原有功能代码...
+  useEffect(() => {
     localStorage.setItem('timetableScale', timetableScale.toString());
     localStorage.setItem('isConfidential', isConfidential.toString());
     localStorage.setItem('isMobileMode', isMobileMode.toString());
-  }, [classes, schedule, timetableScale, isConfidential, isMobileMode]);
+  }, [timetableScale, isConfidential, isMobileMode]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -116,36 +216,30 @@ const App: React.FC = () => {
   const handleUndo = useCallback(() => {
     if (past.length === 0) return;
     const previous = past[past.length - 1];
-    const newPast = past.slice(0, past.length - 1);
     setFuture(prev => [schedule, ...prev]);
-    setPast(newPast);
+    setPast(past.slice(0, past.length - 1));
     setSchedule(previous);
   }, [past, schedule]);
 
   const handleRedo = useCallback(() => {
     if (future.length === 0) return;
     const next = future[0];
-    const newFuture = future.slice(1);
     setPast(prev => [...prev, schedule]);
-    setFuture(newFuture);
+    setFuture(future.slice(1));
     setSchedule(next);
   }, [future, schedule]);
 
   const monthDays = useMemo(() => generateMonthDays(currentDate), [currentDate]);
   const weeks = useMemo(() => {
     const res = [];
-    for (let i = 0; i < monthDays.length; i += 7) {
-      res.push(monthDays.slice(i, i + 7));
-    }
+    for (let i = 0; i < monthDays.length; i += 7) res.push(monthDays.slice(i, i + 7));
     return res;
   }, [monthDays]);
 
   const timelineRange = useMemo(() => getTimelineRange(schedule), [schedule]);
   const hours = useMemo(() => {
     const h = [];
-    for (let m = timelineRange.min; m <= timelineRange.max; m += 60) {
-      h.push(format(new Date().setHours(Math.floor(m/60), 0), 'HH:00'));
-    }
+    for (let m = timelineRange.min; m <= timelineRange.max; m += 60) h.push(format(new Date().setHours(Math.floor(m/60), 0), 'HH:00'));
     return h;
   }, [timelineRange]);
 
@@ -164,6 +258,7 @@ const App: React.FC = () => {
     const isNew = !classes.find(c => c.id === classDef.id);
     if (isNew) setClasses(prev => [...prev, updatedClassDef]);
     else setClasses(prev => prev.map(c => c.id === classDef.id ? updatedClassDef : c));
+    
     if (recurring) {
       const { startDate, endDate, updateMode } = recurring;
       const otherClasses = schedule.filter(s => s.id !== classDef.id);
@@ -175,8 +270,7 @@ const App: React.FC = () => {
           (isBefore(new Date(s.date), startDate) || isAfter(new Date(s.date), endDate))
         );
       }
-      const effectiveStart = isBefore(startDate, today) ? today : startDate;
-      const newInstances = applyRecurrence(updatedClassDef, { ...recurring, startDate: effectiveStart }, today);
+      const newInstances = applyRecurrence(updatedClassDef, { ...recurring, startDate: isBefore(startDate, today) ? today : startDate }, today);
       updateScheduleWithHistory([...otherClasses, ...pastInstances, ...futureInstancesToKeep, ...newInstances]);
     } else if (!isNew) {
       updateScheduleWithHistory(schedule.map(s => (s.id === classDef.id && !isBefore(new Date(s.date), today)) ? { ...s, ...updatedClassDef } : s));
@@ -190,11 +284,13 @@ const App: React.FC = () => {
     updateScheduleWithHistory(schedule.filter(s => {
       if (s.id !== classId) return true;
       const classDate = startOfDay(parseISO(s.date));
-      const isInRange = (isAfter(classDate, start) || classDate.getTime() === start.getTime()) && 
-                        (isBefore(classDate, end) || classDate.getTime() === end.getTime());
-      return !isInRange;
+      return !((isAfter(classDate, start) || classDate.getTime() === start.getTime()) && (isBefore(classDate, end) || classDate.getTime() === end.getTime()));
     }));
-    alert('已清除选定日期范围内的班级课程。');
+  };
+
+  // Fix: Added handleInstanceClick to manage selection of a scheduled class instance
+  const handleInstanceClick = (instance: ScheduledClass) => {
+    setSelectedInstanceId(instance.instanceId);
   };
 
   const handleUpdateInstanceTime = (instanceId: string, startTime: string, endTime: string) => {
@@ -204,282 +300,91 @@ const App: React.FC = () => {
   const performDrop = (date: string, classId: string) => {
     const classDef = classes.find(c => c.id === classId);
     if (!classDef) return;
-    const startTime = classDef.batchConfig?.startTime || "09:00";
-    const endTime = classDef.batchConfig?.endTime || "10:30";
-    const newInstance: ScheduledClass = {
+    updateScheduleWithHistory([...schedule, {
       ...classDef,
       instanceId: crypto.randomUUID(),
       date,
-      startTime,
-      endTime
-    };
-    updateScheduleWithHistory([...schedule, newInstance]);
+      startTime: classDef.batchConfig?.startTime || "09:00",
+      endTime: classDef.batchConfig?.endTime || "10:30"
+    }]);
     setDraggedClassId(null);
     setSelectedClassId(null);
   };
 
   const handleExport = async () => {
     if (!timetableRef.current) return;
-    
     const loadingToast = document.createElement('div');
-    loadingToast.innerHTML = '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:white;padding:20px 40px;border-radius:10px;z-index:99999;font-weight:bold;">图片生成中，请稍候...</div>';
+    loadingToast.innerHTML = '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:white;padding:20px 40px;border-radius:10px;z-index:99999;">生成图片中...</div>';
     document.body.appendChild(loadingToast);
-
     try {
-      const originalWidth = timetableRef.current.offsetWidth;
-
-      const canvas = await html2canvas(timetableRef.current, { 
-        scale: 2, 
-        useCORS: true,
-        logging: false,
-        backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-        width: originalWidth,
-        onclone: (clonedDoc) => {
-          const clonedContainer = clonedDoc.body.querySelector('.timetable-container') as HTMLElement;
-          if (clonedContainer) {
-            clonedContainer.style.width = `${originalWidth}px`;
-          }
-
-          const stickyElements = clonedDoc.querySelectorAll('.sticky');
-          stickyElements.forEach(el => {
-            (el as HTMLElement).style.position = 'relative';
-          });
-
-          const scheduleItems = clonedDoc.querySelectorAll('.group\\/item');
-          scheduleItems.forEach(el => {
-            const htmlEl = el as HTMLElement;
-            htmlEl.style.overflow = 'visible';
-            htmlEl.style.boxShadow = 'none';
-            const spans = htmlEl.querySelectorAll('span');
-            spans.forEach(s => (s as HTMLElement).style.display = 'inline-block');
-          });
-        }
-      });
-
+      const canvas = await html2canvas(timetableRef.current, { scale: 2, useCORS: true, backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff' });
       const link = document.createElement('a');
-      link.download = `小萌英语课表-${format(currentDate, 'yyyy-MM')}.png`;
-      link.href = canvas.toDataURL('image/png', 1.0);
+      link.download = `课表-${format(currentDate, 'yyyy-MM')}.png`;
+      link.href = canvas.toDataURL('image/png');
       link.click();
-    } catch (err) {
-      console.error('导出失败:', err);
-      alert('导出图片失败，请重试');
     } finally {
       document.body.removeChild(loadingToast);
     }
   };
 
-  const saveProject = () => {
-    const data = JSON.stringify({ classes, schedule });
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `小萌排课存档-${format(new Date(), 'yyyyMMdd')}.json`;
-    link.click();
-  };
-
-  const handleShare = () => {
-    const data = { classes, schedule };
-    const jsonStr = JSON.stringify(data);
-    
-    if (jsonStr.length > 30000) {
-      alert("警告：数据量过大，建议导出 JSON 存档。");
-    }
-
-    const encoded = btoa(encodeURIComponent(jsonStr));
-    const shareUrl = `${window.location.origin}${window.location.pathname}#data=${encoded}`;
-    
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      alert("分享链接已复制！手机打开此链接即可同步。");
-    }).catch(err => {
-      window.prompt("请手动复制链接：", shareUrl);
-    });
-  };
-
-  const loadProject = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e: any) => {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = (event: any) => {
-        try {
-          const data = JSON.parse(event.target.result);
-          if (data.classes && data.schedule) {
-            setClasses(data.classes);
-            setSchedule(data.schedule);
-            setPast([]);
-            setFuture([]);
-            alert('读取存档成功！');
-          }
-        } catch (err) {
-          alert('无效的存档文件');
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  };
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      if (window.innerHeight > window.innerWidth) {
-        setIsRotated(true);
-      }
-    } else {
-      document.exitFullscreen();
-      setIsRotated(false);
-    }
-  };
-
-  const handleInstanceClick = (instance: ScheduledClass) => {
-    if (selectedInstanceId === instance.instanceId) {
-      setEditingInstance(instance);
-      setIsInstanceModalOpen(true);
-    } else {
-      setSelectedInstanceId(instance.instanceId);
-    }
-  };
-
-  const handleIncreaseScale = () => setTimetableScale(prev => Math.min(prev + 0.5, 3.0));
-  const handleDecreaseScale = () => setTimetableScale(prev => Math.max(prev - 0.5, 1.0));
-
-  const toggleMobileMode = () => {
-    const nextMode = !isMobileMode;
-    setIsMobileMode(nextMode);
-    if (nextMode) {
-      setIsSidebarCollapsed(true);
-      setTimetableScale(0.8); // 自动缩小以适配 iPhone
-    } else {
-      setIsSidebarCollapsed(false);
-      setTimetableScale(1.0);
-    }
-  };
-
   return (
-    <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden select-none transition-all duration-500 ${isRotated ? 'force-landscape' : ''} ${isMobileMode ? 'is-mobile-ui' : ''}`}>
+    <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden transition-all ${isRotated ? 'force-landscape' : ''} ${isMobileMode ? 'is-mobile-ui' : ''}`}>
       <TimetableHeader 
-        currentDate={currentDate} 
-        onDateChange={setCurrentDate} 
-        onExport={handleExport} 
-        onSaveProject={saveProject}
-        onLoadProject={loadProject}
-        onShare={handleShare}
-        onCreateClass={() => setIsModalOpen(true)}
-        theme={theme}
-        onThemeToggle={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
-        onToggleFullscreen={toggleFullscreen}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        canUndo={past.length > 0}
-        canRedo={future.length > 0}
-        onIncreaseScale={handleIncreaseScale}
-        onDecreaseScale={handleDecreaseScale}
-        scale={timetableScale}
-        isConfidential={isConfidential}
-        onToggleConfidential={() => setIsConfidential(!isConfidential)}
-        isMobileMode={isMobileMode}
-        onToggleMobileMode={toggleMobileMode}
+        currentDate={currentDate} onDateChange={setCurrentDate} onExport={handleExport} 
+        onSaveProject={() => {}} onLoadProject={() => {}} onCreateClass={() => setIsModalOpen(true)}
+        theme={theme} onThemeToggle={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+        onToggleFullscreen={() => {}} onUndo={handleUndo} onRedo={handleRedo} 
+        canUndo={past.length > 0} canRedo={future.length > 0}
+        onIncreaseScale={() => setTimetableScale(p => Math.min(p + 0.5, 3))}
+        onDecreaseScale={() => setTimetableScale(p => Math.max(p - 0.5, 1))}
+        scale={timetableScale} isConfidential={isConfidential} onToggleConfidential={() => setIsConfidential(!isConfidential)}
+        isMobileMode={isMobileMode} onToggleMobileMode={() => setIsMobileMode(!isMobileMode)}
+        syncStatus={syncStatus} onSyncClick={() => setIsSyncModalOpen(true)} onManualSync={pullFromCloud} isSyncActive={!!syncId}
       />
 
       <div className="flex-1 flex overflow-hidden relative" onClick={() => setSelectedInstanceId(null)}>
-        <div className="relative flex h-full z-40" onClick={(e) => e.stopPropagation()}>
-          <div className={`bg-white dark:bg-slate-900 border-r dark:border-slate-800 flex flex-col shadow-sm transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-0 opacity-0 overflow-hidden' : 'w-80'}`}>
-            <div className="p-4 border-b dark:border-slate-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-gray-700 dark:text-gray-300">
-                  班级库 <span className="text-xs font-normal text-gray-400 ml-1">{classes.length}</span>
-                </h2>
-              </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <input className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white" placeholder="查找班级..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
-              {classes.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
-                <div key={c.id} className={`relative transition-all ${selectedClassId === c.id ? 'ring-2 ring-blue-500 ring-offset-2 rounded-lg' : ''}`} onClick={() => setSelectedClassId(c.id === selectedClassId ? null : c.id)}>
-                  <ClassCard 
-                    classDef={c} 
-                    onDragStart={(_, id) => setDraggedClassId(id)} 
-                    onEdit={(def) => { setEditingClass(def); setIsModalOpen(true); }} 
-                    onDelete={(id) => setClasses(prev => prev.filter(x => x.id !== id))}
-                    isConfidential={isConfidential}
-                  />
-                </div>
-              ))}
+        <div className={`bg-white dark:bg-slate-900 border-r dark:border-slate-800 flex flex-col shadow-sm transition-all ${isSidebarCollapsed ? 'w-0 opacity-0' : 'w-80'}`}>
+          <div className="p-4 border-b dark:border-slate-800 space-y-4">
+            <h2 className="font-bold text-sm">班级库 <span className="opacity-50 ml-1">{classes.length}</span></h2>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+              <input className="w-full pl-9 pr-4 py-1.5 bg-gray-50 dark:bg-slate-800 border rounded-lg text-xs outline-none" placeholder="查找班级..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
           </div>
-          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute -right-2 top-1/2 -translate-y-1/2 z-50 bg-white dark:bg-slate-800 border dark:border-slate-700 w-5 h-16 flex items-center justify-center rounded-full shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-all group">
-            {isSidebarCollapsed ? <ChevronRight size={12} className="text-blue-600 dark:text-blue-400" /> : <ChevronLeft size={12} className="text-gray-400 dark:text-gray-500" />}
-          </button>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+            {classes.filter(c => c.name.includes(searchTerm)).map(c => (
+              <ClassCard key={c.id} classDef={c} onDragStart={(_, id) => setDraggedClassId(id)} onEdit={(d) => {setEditingClass(d); setIsModalOpen(true);}} onDelete={(id) => setClasses(p => p.filter(x => x.id !== id))} isConfidential={isConfidential} />
+            ))}
+          </div>
         </div>
 
-        <div className={`flex-1 overflow-auto bg-slate-100/30 dark:bg-slate-900/50 ${isMobileMode ? 'p-1' : 'p-4 sm:p-6'} custom-scrollbar`}>
-          <div ref={timetableRef} className={`timetable-container bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-200 dark:border-slate-800 overflow-hidden ${isMobileMode ? 'min-w-[700px]' : 'min-w-[1000px]'}`}>
-            <div className="grid grid-cols-[50px_repeat(7,1fr)] sm:grid-cols-[60px_repeat(7,1fr)] bg-gray-50 dark:bg-slate-800 border-b dark:border-slate-700">
-              <div className="border-r dark:border-slate-700"></div>
+        <div className={`flex-1 overflow-auto p-4 sm:p-6 bg-slate-100/30 dark:bg-slate-900/50 custom-scrollbar`}>
+          <div ref={timetableRef} className={`timetable-container bg-white dark:bg-slate-900 rounded-xl shadow-xl border overflow-hidden ${isMobileMode ? 'min-w-[700px]' : 'min-w-[1000px]'}`}>
+            <div className="grid grid-cols-[60px_repeat(7,1fr)] bg-gray-50 dark:bg-slate-800 border-b">
+              <div className="border-r"></div>
               {['一', '二', '三', '四', '五', '六', '日'].map(d => (
-                <div key={d} style={{ fontSize: `${(isMobileMode ? 10 : 12) * timetableScale}px` }} className="py-2 text-center font-bold text-gray-500 dark:text-gray-400 border-r dark:border-slate-700 last:border-r-0">周{d}</div>
+                <div key={d} style={{ fontSize: `${12 * timetableScale}px` }} className="py-2 text-center font-bold text-gray-500 border-r last:border-r-0">周{d}</div>
               ))}
             </div>
-
             <div className="flex flex-col">
               {weeks.map((week, wIdx) => (
-                <div key={wIdx} className="grid grid-cols-[50px_repeat(7,1fr)] sm:grid-cols-[60px_repeat(7,1fr)] border-b dark:border-slate-700 last:border-b-0">
-                  <div className="bg-gray-50/50 dark:bg-slate-800/50 border-r dark:border-slate-700 flex flex-col relative py-2 min-h-[400px]">
-                    {hours.map((h, i) => (
-                      <div key={h} className="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 h-[60px] flex items-start justify-center font-medium">
-                        {h}
-                      </div>
-                    ))}
+                <div key={wIdx} className="grid grid-cols-[60px_repeat(7,1fr)] border-b last:border-b-0">
+                  <div className="bg-gray-50/50 dark:bg-slate-800/50 border-r flex flex-col py-2 min-h-[400px]">
+                    {hours.map(h => <div key={h} className="text-[10px] text-gray-400 h-[60px] flex items-start justify-center font-medium">{h}</div>)}
                   </div>
                   {week.map(day => (
-                    <TimetableCell
-                      key={format(day, 'yyyy-MM-dd')}
-                      date={day}
-                      isMainMonth={isSameMonth(day, currentDate)}
-                      scheduledClasses={schedule.filter(s => s.date === format(day, 'yyyy-MM-dd'))}
-                      timelineRange={timelineRange}
-                      selectedInstanceId={selectedInstanceId}
-                      onInstanceClick={handleInstanceClick}
-                      onDrop={() => {
-                        if (draggedClassId) performDrop(format(day, 'yyyy-MM-dd'), draggedClassId);
-                        else if (selectedClassId) performDrop(format(day, 'yyyy-MM-dd'), selectedClassId);
-                      }}
-                      onRemoveInstance={(id) => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))}
-                      onEditInstance={(instance) => { setEditingInstance(instance); setIsInstanceModalOpen(true); }}
-                      scale={timetableScale}
-                      isConfidential={isConfidential}
-                    />
+                    <TimetableCell key={format(day, 'yyyy-MM-dd')} date={day} isMainMonth={isSameMonth(day, currentDate)} scheduledClasses={schedule.filter(s => s.date === format(day, 'yyyy-MM-dd'))} timelineRange={timelineRange} selectedInstanceId={selectedInstanceId} onInstanceClick={handleInstanceClick} onDrop={() => performDrop(format(day, 'yyyy-MM-dd'), draggedClassId || selectedClassId || '')} onRemoveInstance={(id) => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))} onEditInstance={(i) => {setEditingInstance(i); setIsInstanceModalOpen(true);}} scale={timetableScale} isConfidential={isConfidential} />
                   ))}
-                  <div className="bg-gray-50/80 dark:bg-slate-800/80 border-r dark:border-slate-700 border-t dark:border-slate-700 flex items-center justify-center font-bold text-gray-400 py-1" style={{ fontSize: '9px' }}>
-                    $
-                  </div>
-                  {week.map(day => {
-                    const dateKey = format(day, 'yyyy-MM-dd');
-                    const dailyIncome = schedule.filter(s => s.date === dateKey).reduce((sum, s) => sum + s.fee, 0);
-                    return (
-                      <div key={`income-${dateKey}`} className="border-r border-t dark:border-slate-700 last:border-r-0 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/5 dark:bg-blue-900/5 py-1" style={{ fontSize: `${(isMobileMode ? 10 : 12) * timetableScale}px` }}>
-                        {dailyIncome > 0 ? (
-                          <span className={isConfidential ? 'mosaic-blur' : ''}>
-                            {dailyIncome}
-                          </span>
-                        ) : ''}
-                      </div>
-                    );
-                  })}
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-      <ClassModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingClass(undefined); }} onSave={handleSaveClass} onClearRange={handleClearRange} initialData={editingClass} />
-      <InstanceTimeModal isOpen={isInstanceModalOpen} onClose={() => { setIsInstanceModalOpen(false); setEditingInstance(null); }} instance={editingInstance} onSave={handleUpdateInstanceTime} />
+
+      <ClassModal isOpen={isModalOpen} onClose={() => {setIsModalOpen(false); setEditingClass(undefined);}} onSave={handleSaveClass} onClearRange={handleClearRange} initialData={editingClass} />
+      <InstanceTimeModal isOpen={isInstanceModalOpen} onClose={() => {setIsInstanceModalOpen(false); setEditingInstance(null);}} instance={editingInstance} onSave={handleUpdateInstanceTime} />
+      <SyncModal isOpen={isSyncModalOpen} onClose={() => setIsSyncModalOpen(false)} syncId={syncId} onEnableSync={handleEnableSync} onJoinSync={handleJoinSync} onDisableSync={handleDisableSync} onManualPull={pullFromCloud} lastSynced={lastSynced} syncStatus={syncStatus} />
     </div>
   );
 };
