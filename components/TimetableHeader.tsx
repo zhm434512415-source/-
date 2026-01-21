@@ -61,7 +61,7 @@ const TimetableHeader: React.FC<TimetableHeaderProps> = ({
           <div className="bg-blue-600 p-1.5 rounded-lg shrink-0">
             <CalendarIcon size={18} className="text-white" />
           </div>
-          <span className="hidden md:inline">小萌英语 <span className="text-xs opacity-60 font-mono ml-1">v2.5.0</span></span>
+          <span className="hidden md:inline">小萌英语 <span className="text-xs opacity-60 font-mono ml-1">v2.5.1</span></span>
         </h1>
         
         <div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg p-1 h-11">

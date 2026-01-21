@@ -268,30 +268,74 @@ const App: React.FC = () => {
               ))}
             </div>
           </div>
-          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute -right-2 top-1/2 -translate-y-1/2 z-50 bg-white dark:bg-slate-800 border dark:border-slate-700 w-5 h-16 flex items-center justify-center rounded-full shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-all group">
-            {isSidebarCollapsed ? <ChevronRight size={12} className="text-blue-600 dark:text-blue-400" /> : <ChevronLeft size={12} className="text-gray-400 dark:text-gray-500" />}
+          {/* 优化后的宽版折叠按钮 */}
+          <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+            className={`absolute -right-4 top-1/2 -translate-y-1/2 z-50 bg-white dark:bg-slate-800 border dark:border-slate-700 w-10 h-24 flex items-center justify-center rounded-r-2xl shadow-xl hover:w-12 hover:bg-blue-50 dark:hover:bg-slate-700 transition-all duration-300 group ${isSidebarCollapsed ? 'opacity-100 translate-x-4' : ''}`}
+            title={isSidebarCollapsed ? "展开班级库" : "隐藏班级库"}
+          >
+            {isSidebarCollapsed ? 
+              <ChevronRight size={24} className="text-blue-600 dark:text-blue-400 animate-pulse" /> : 
+              <ChevronLeft size={24} className="text-gray-400 dark:text-gray-500 group-hover:text-blue-600" />
+            }
           </button>
         </div>
 
         <div className={`flex-1 overflow-auto bg-slate-100/30 dark:bg-slate-900/50 ${isMobileMode ? 'p-1' : 'p-4 sm:p-6'} custom-scrollbar`}>
-          <div ref={timetableRef} className={`timetable-container bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-200 dark:border-slate-800 overflow-hidden ${isMobileMode ? 'min-w-[700px]' : 'min-w-[1000px]'}`}>
-            <div className="grid grid-cols-[50px_repeat(7,1fr)] sm:grid-cols-[60px_repeat(7,1fr)] bg-gray-50 dark:bg-slate-800 border-b dark:border-slate-700">
+          <div ref={timetableRef} className={`timetable-container bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-200 dark:border-slate-800 overflow-hidden ${isMobileMode ? 'min-w-[800px]' : 'min-w-[1000px]'}`}>
+            {/* 表头：1列时间轴(100px) + 7列日期 */}
+            <div className="grid grid-cols-[100px_repeat(7,1fr)] bg-gray-50 dark:bg-slate-800 border-b dark:border-slate-700">
               <div className="border-r dark:border-slate-700"></div>
               {['一', '二', '三', '四', '五', '六', '日'].map(d => (
                 <div key={d} style={{ fontSize: `${(isMobileMode ? 10 : 12) * timetableScale}px` }} className="py-2 text-center font-bold text-gray-500 dark:text-gray-400 border-r dark:border-slate-700 last:border-r-0">周{d}</div>
               ))}
             </div>
+            
             <div className="flex flex-col">
-              {weeks.map((week, wIdx) => (
-                <div key={wIdx} className="grid grid-cols-[50px_repeat(7,1fr)] sm:grid-cols-[60px_repeat(7,1fr)] border-b dark:border-slate-700 last:border-b-0">
-                  <div className="bg-gray-50/50 dark:bg-slate-800/50 border-r dark:border-slate-700 flex flex-col relative py-2 min-h-[400px]">
-                    {hours.map(h => <div key={h} className="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 h-[60px] flex items-start justify-center font-medium">{h}</div>)}
+              {weeks.map((week, wIdx) => {
+                const weekDates = week.map(d => format(d, 'yyyy-MM-dd'));
+                const weekTotal = schedule
+                  .filter(s => weekDates.includes(s.date))
+                  .reduce((sum, item) => sum + item.fee, 0);
+
+                return (
+                  <div key={wIdx} className="grid grid-cols-[100px_repeat(7,1fr)] border-b dark:border-slate-700 last:border-b-0">
+                    {/* 时间轴列 */}
+                    <div className="bg-gray-50/50 dark:bg-slate-800/50 border-r dark:border-slate-700 flex flex-col relative py-2 min-h-[400px]">
+                      {hours.map(h => <div key={h} className="text-gray-400 dark:text-gray-500 h-[60px] flex items-start justify-center font-medium" style={{ fontSize: `${(isMobileMode ? 9 : 10) * timetableScale}px` }}>{h}</div>)}
+                    </div>
+                    {/* 每日课程单元格 */}
+                    {week.map(day => (
+                      <TimetableCell key={format(day, 'yyyy-MM-dd')} date={day} isMainMonth={isSameMonth(day, currentDate)} scheduledClasses={schedule.filter(s => s.date === format(day, 'yyyy-MM-dd'))} timelineRange={timelineRange} selectedInstanceId={selectedInstanceId} onInstanceClick={s => setSelectedInstanceId(s.instanceId)} onDrop={() => performDrop(format(day, 'yyyy-MM-dd'), draggedClassId || selectedClassId || '')} onRemoveInstance={id => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))} onEditInstance={i => { setEditingInstance(i); setIsInstanceModalOpen(true); }} scale={timetableScale} isConfidential={isConfidential} />
+                    ))}
+
+                    {/* 每周底部的日收入横向统计行 */}
+                    {/* 1. 左侧汇总格 -> 显示“周收入: ¥XXX” */}
+                    <div className="bg-blue-50/30 dark:bg-blue-900/10 border-t border-r dark:border-slate-700 flex flex-col items-center justify-center p-1 min-h-[48px]">
+                        <span className={`font-bold text-blue-500 dark:text-blue-400 uppercase tracking-tighter ${isConfidential ? 'mosaic-blur' : ''}`} style={{ fontSize: `${8 * timetableScale}px` }}>周收入</span>
+                        <span className={`font-black text-blue-700 dark:text-blue-300 ${isConfidential ? 'mosaic-blur' : ''}`} style={{ fontSize: `${11 * timetableScale}px` }}>
+                            ¥{weekTotal}
+                        </span>
+                    </div>
+                    {/* 2. 每日收入汇总单元格 (7个) */}
+                    {week.map(day => {
+                        const dateStr = format(day, 'yyyy-MM-dd');
+                        const dailySum = schedule
+                          .filter(s => s.date === dateStr)
+                          .reduce((sum, item) => sum + item.fee, 0);
+                        
+                        return (
+                          <div key={`footer-${dateStr}`} className="bg-slate-50 dark:bg-slate-800/40 border-t border-r dark:border-slate-700 flex flex-col items-center justify-center py-2 last:border-r-0 transition-colors hover:bg-blue-50/50 dark:hover:bg-slate-700/50">
+                             <span className={`text-gray-400 dark:text-gray-500 font-bold uppercase tracking-tight ${isConfidential ? 'mosaic-blur' : ''}`} style={{ fontSize: `${7 * timetableScale}px` }}>当日</span>
+                             <span className={`font-black text-green-600 dark:text-green-400 ${isConfidential ? 'mosaic-blur' : ''}`} style={{ fontSize: `${10 * timetableScale}px` }}>
+                                ¥{dailySum}
+                             </span>
+                          </div>
+                        );
+                    })}
                   </div>
-                  {week.map(day => (
-                    <TimetableCell key={format(day, 'yyyy-MM-dd')} date={day} isMainMonth={isSameMonth(day, currentDate)} scheduledClasses={schedule.filter(s => s.date === format(day, 'yyyy-MM-dd'))} timelineRange={timelineRange} selectedInstanceId={selectedInstanceId} onInstanceClick={s => setSelectedInstanceId(s.instanceId)} onDrop={() => performDrop(format(day, 'yyyy-MM-dd'), draggedClassId || selectedClassId || '')} onRemoveInstance={id => updateScheduleWithHistory(schedule.filter(s => s.instanceId !== id))} onEditInstance={i => { setEditingInstance(i); setIsInstanceModalOpen(true); }} scale={timetableScale} isConfidential={isConfidential} />
-                  ))}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

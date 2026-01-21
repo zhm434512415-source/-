@@ -58,13 +58,15 @@ const TimetableCell: React.FC<TimetableCellProps> = ({
       <div className={`p-1 flex items-center justify-between sticky top-0 z-20 ${
         isToday ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-50/80 dark:bg-slate-800/80 group-hover:bg-gray-100 dark:group-hover:bg-slate-700'
       }`}>
-        <span 
-          className={`font-bold ${!isMainMonth && !isToday ? 'opacity-30' : 'dark:text-white'}`}
-          style={{ fontSize: `${10 * scale}px` }}
-        >
-          {format(date, 'd')}
-        </span>
-        {isToday && <span style={{ fontSize: `${8 * scale}px` }} className="font-black uppercase tracking-wider">今日</span>}
+        <div className="flex items-center gap-1.5">
+          <span 
+            className={`font-bold ${!isMainMonth && !isToday ? 'opacity-30' : 'dark:text-white'}`}
+            style={{ fontSize: `${10 * scale}px` }}
+          >
+            {format(date, 'd')}
+          </span>
+          {isToday && <span style={{ fontSize: `${8 * scale}px` }} className="font-black uppercase tracking-wider bg-white/20 px-1 rounded">今日</span>}
+        </div>
       </div>
 
       <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.1]">
