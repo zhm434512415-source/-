@@ -16,6 +16,20 @@
   min-height: 100vh;
 }
 
+/* 适配移动端安全区域 */
+.safe-area-pt {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-px {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* 时间选择器样式优化 */
 input[type="time"]::-webkit-calendar-picker-indicator,
 input[type="date"]::-webkit-calendar-picker-indicator {
@@ -32,7 +46,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: grabbing;
 }
 
-/* 马赛克/模糊效果 - 增加强度并确保背景剪切 */
+/* 马赛克/模糊效果 */
 .mosaic-blur {
   filter: blur(6px) !important;
   user-select: none;

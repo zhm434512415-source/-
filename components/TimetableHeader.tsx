@@ -55,7 +55,7 @@ const TimetableHeader: React.FC<TimetableHeaderProps> = ({
   const groupBgClass = "flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg h-11";
 
   return (
-    <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between shadow-sm relative z-50 gap-3">
+    <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between shadow-sm relative z-50 gap-3 safe-area-pt safe-area-px">
       <div className="flex items-center gap-4">
         <h1 className="text-lg font-bold text-blue-600 flex items-center gap-2">
           <div className="bg-blue-600 p-1.5 rounded-lg shrink-0">
@@ -104,7 +104,6 @@ const TimetableHeader: React.FC<TimetableHeaderProps> = ({
           </button>
         </div>
 
-        {/* 字号缩放按钮：T在左，加减在右 */}
         <div className={groupBgClass}>
           <button onClick={onDecreaseScale} className="flex items-center gap-1.5 px-2 hover:bg-white dark:hover:bg-slate-700 rounded-md transition-all text-gray-600 dark:text-gray-400 h-9" title="减小缩放">
             <Type size={14} className="opacity-70" />

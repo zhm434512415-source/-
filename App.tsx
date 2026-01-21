@@ -237,7 +237,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden select-none transition-all duration-500 ${isRotated ? 'force-landscape' : ''} ${isMobileMode ? 'is-mobile-ui' : ''}`}>
+    <div className={`h-screen flex flex-col bg-slate-50 dark:bg-dark-bg overflow-hidden select-none transition-all duration-500 ${isRotated ? 'force-landscape' : ''} ${isMobileMode ? 'is-mobile-ui' : ''} safe-area-pb`}>
       <TimetableHeader 
         currentDate={currentDate} onDateChange={setCurrentDate} onExport={handleExport} 
         onSaveProject={saveProject} onLoadProject={loadProject} onCreateClass={() => setIsModalOpen(true)}
@@ -250,7 +250,7 @@ const App: React.FC = () => {
         isMobileMode={isMobileMode} onToggleMobileMode={() => setIsMobileMode(!isMobileMode)}
       />
 
-      <div className="flex-1 flex overflow-hidden relative" onClick={() => setSelectedInstanceId(null)}>
+      <div className="flex-1 flex overflow-hidden relative safe-area-px" onClick={() => setSelectedInstanceId(null)}>
         <div className="relative flex h-full z-40" onClick={(e) => e.stopPropagation()}>
           <div className={`bg-white dark:bg-slate-900 border-r dark:border-slate-800 flex flex-col shadow-sm transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-0 opacity-0 overflow-hidden' : 'w-80'}`}>
             <div className="p-4 border-b dark:border-slate-800 space-y-4">
