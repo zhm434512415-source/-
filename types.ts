@@ -35,3 +35,10 @@ export interface RecurringConfig {
   daysOfWeek?: number[];
   month?: number;
 }
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  content: string;
+  timestamp: number;
+  status?: 'processing' | 'success' | 'error';
+}

@@ -1,8 +1,15 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- 强制禁用缓存，确保每次部署后 Chrome App 能获取到最新 HTML -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <title>小萌英语工作室 | 智能排课系统</title>
     
     <!-- Tailwind 配置 -->
@@ -72,13 +79,15 @@
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "html2canvas": "https://esm.sh/html2canvas@^1.4.1",
     "vite": "https://esm.sh/vite@^7.3.1",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0"
   }
 }
 </script>
 </head>
 <body class="bg-slate-50 dark:bg-slate-950">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <!-- 添加版本号后缀 ?v=... 强制浏览器重新加载最新的代码 -->
+    <script type="module" src="/index.tsx?v=2.5.2"></script>
 </body>
 </html>
